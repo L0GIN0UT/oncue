@@ -4,6 +4,8 @@
   ``EventProcessor``) отсекает дубли, ``version_type=external`` — устаревшие события.
 * ``media_pipeline.asset_set.v1`` → проекция готовности ассетов загадок (``MarkClueAssets``),
   устаревшие по ``version`` события отбрасываются.
+* ``game.session.v1`` / ``match.match.v1`` → счётчики угадываний по контенту
+  (``RecordRoundStats``, ADR 0076); inbox и инкремент — в одной транзакции;
 * RabbitMQ-задача ``catalog.import`` → ``RunImport`` (идемпотентна по ``import_id``);
 * RabbitMQ-задача ``republish`` → ``RunRepublishBatch`` (порция; повтор — no-op по курсору).
 """
@@ -16,6 +18,11 @@ from typing import Any
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from catalog_service.application.commands.content_stats import (
+    GAME_FINISHED,
+    MATCH_FINISHED,
+    RecordRoundStats,
+)
 from catalog_service.application.commands.imports import IMPORT_TASK
 from catalog_service.application.commands.projections import (
     ClueAssetsEvent,
@@ -23,9 +30,11 @@ from catalog_service.application.commands.projections import (
     MarkClueAssets,
 )
 from catalog_service.application.commands.republish import REPUBLISH_TASK
+from catalog_service.domain.content_stats import InvalidStatsEventError
 from catalog_service.infrastructure.container import container_for
 from catalog_service.infrastructure.db.repositories import (
     SqlClueStatusRepository,
+    SqlContentStatsRepository,
     SqlMediaItemRepository,
 )
 from gv_messaging import EventEnvelope, EventHandlerRegistry, PermanentError
@@ -36,7 +45,9 @@ log = structlog.get_logger(__name__)
 
 OWN_TOPIC = "catalog.media_item.v1"
 MEDIA_PIPELINE_TOPIC = "media_pipeline.asset_set.v1"
-CONSUMED_TOPICS: tuple[str, ...] = (OWN_TOPIC, MEDIA_PIPELINE_TOPIC)
+GAME_TOPIC = "game.session.v1"
+MATCH_TOPIC = "match.match.v1"
+CONSUMED_TOPICS: tuple[str, ...] = (OWN_TOPIC, MEDIA_PIPELINE_TOPIC, GAME_TOPIC, MATCH_TOPIC)
 
 CATALOG_EVENTS = (
     "catalog.MediaItemCreated",
@@ -104,6 +115,15 @@ def build_event_handlers(infra: Infrastructure) -> EventHandlerRegistry:
             parse_clue_event(envelope)
         )
 
+    async def record_round_stats(envelope: EventEnvelope, session: AsyncSession) -> None:
+        use_case = RecordRoundStats(SqlContentStatsRepository(session), c.stats_rules)
+        try:
+            await use_case(envelope.event_type, envelope.payload)
+        except InvalidStatsEventError as exc:
+            raise PermanentError(f"битый payload {envelope.event_type}: {exc}") from exc
+
+    registry.register(GAME_FINISHED, record_round_stats)
+    registry.register(MATCH_FINISHED, record_round_stats)
     for event_type in CATALOG_EVENTS:
         registry.register(event_type, index_item)
     registry.register("media_pipeline.AssetsReady", mark_clue_assets)

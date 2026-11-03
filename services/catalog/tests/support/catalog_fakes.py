@@ -8,12 +8,13 @@ from __future__ import annotations
 
 import copy
 import uuid
-from collections.abc import AsyncIterator, Sequence
+from collections.abc import AsyncIterator, Mapping, Sequence
 from dataclasses import dataclass, field
 
 from catalog_service.application.dto import (
     AdminItemFilter,
     ClueStatus,
+    ContentStatsRow,
     ImportedItem,
     ItemSummary,
     RecordedAction,
@@ -22,6 +23,7 @@ from catalog_service.application.dto import (
     Suggestion,
 )
 from catalog_service.domain.clue_texts import ClueTexts
+from catalog_service.domain.content_stats import StatsDelta, StatsKey
 from catalog_service.domain.import_job import ImportCounters, ImportJob
 from catalog_service.domain.media_item import MediaItem
 from catalog_service.domain.model import ExternalSource, MediaDomain
@@ -80,6 +82,7 @@ class CatalogStore:
     clue: dict[tuple[uuid.UUID, str, str], ClueStatus] = field(default_factory=dict)
     texts: dict[uuid.UUID, ClueTexts] = field(default_factory=dict)
     republish: dict[uuid.UUID, RepublishJob] = field(default_factory=dict)
+    stats: dict[StatsKey, StatsDelta] = field(default_factory=dict)
     idempotency: InMemoryIdempotencyStore = field(default_factory=InMemoryIdempotencyStore)
     events: list[object] = field(default_factory=list)
 
@@ -223,6 +226,52 @@ class InMemoryRepublish:
         self._s.republish[job.id] = copy.copy(job)
 
 
+class InMemoryContentStats:
+    """Счётчики в памяти: тот же контракт, что у SQL (инкремент по ключу)."""
+
+    _COUNTERS = ("shown", "exact", "partial", "miss", "gave_up", "time_sum_ms", "time_count")
+
+    def __init__(self, store: CatalogStore) -> None:
+        self._s = store
+
+    async def add(self, deltas: Mapping[StatsKey, StatsDelta]) -> None:
+        for key, d in deltas.items():
+            cur = self._s.stats.setdefault(key, StatsDelta())
+            for c in self._COUNTERS:
+                setattr(cur, c, getattr(cur, c) + getattr(d, c))
+            for src, dst in (
+                (d.level_buckets, cur.level_buckets),
+                (d.time_buckets, cur.time_buckets),
+            ):
+                for b, n in src.items():
+                    dst[b] = dst.get(b, 0) + n
+
+    async def easiest(
+        self, *, min_shown: int, limit: int, mode_key: str | None, domain: str | None
+    ) -> list[ContentStatsRow]:
+        rows = [
+            ContentStatsRow(
+                media_item_id=k[0],
+                mode_key=k[1],
+                title="?",
+                domain=domain or "music",
+                shown=d.shown,
+                exact=d.exact,
+                partial=d.partial,
+                miss=d.miss,
+                gave_up=d.gave_up,
+                time_sum_ms=d.time_sum_ms,
+                time_count=d.time_count,
+                level_buckets=dict(d.level_buckets),
+                time_buckets=dict(d.time_buckets),
+            )
+            for k, d in self._s.stats.items()
+            if d.shown >= min_shown and (mode_key is None or k[1] == mode_key)
+        ]
+        rows.sort(key=lambda r: (-r.exact / r.shown, -r.shown, str(r.media_item_id), r.mode_key))
+        return rows[:limit]
+
+
 class FakeCatalogUow(FakeUnitOfWork):
     """UoW из testkit + репозитории в памяти; события копятся в ``store.events``."""
 
@@ -237,6 +286,7 @@ class FakeCatalogUow(FakeUnitOfWork):
         self.clue_status = InMemoryClueStatus(store)
         self.clue_texts = InMemoryClueTexts(store)
         self.republish = InMemoryRepublish(store)
+        self.content_stats = InMemoryContentStats(store)
 
     async def commit(self) -> None:
         await super().commit()

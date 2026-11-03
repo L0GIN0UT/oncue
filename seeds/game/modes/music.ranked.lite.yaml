@@ -1,4 +1,4 @@
-# Дуэль «лайт» (music, рейтинговая): выбор из 4 вариантов (`pick`), один уровень, одна попытка; дистракторы подбирает ядро (ADR 0040). Очки за скорость (`party_speed`).
+# Дуэль «лайт» (music, рейтинговая): выбор из 4 вариантов (`pick`), один уровень, одна попытка; дистракторы подбирает ядро (ADR 0040) из того же пула: верхняя половина по популярности и веса sqrt (ADR 0075). Очки за скорость (`party_speed`).
 # clue.params — одноуровневый статический профиль media-pipeline (как у `pair`-режимов, D7).
 key: music.ranked.lite
 title_i18n: modes.music.ranked.lite.title
@@ -11,6 +11,8 @@ source:
       kinds:
       - track
       min_playable: 20
+      popularity_top_pct: 50
+      popularity_weight: sqrt
 clue:
   type: audio_intro
   params:

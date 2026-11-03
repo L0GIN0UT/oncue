@@ -11,11 +11,13 @@ from datetime import datetime
 
 from sqlalchemy import (
     ARRAY,
+    BigInteger,
     CheckConstraint,
     Column,
     DateTime,
     Float,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Integer,
     PrimaryKeyConstraint,
@@ -238,6 +240,50 @@ media_item_clue_status = Table(
     PrimaryKeyConstraint("media_item_id", "clue_type", "profile_key"),
     CheckConstraint("status IN ('ready', 'failed')", name="status_known"),
     CheckConstraint("version >= 1", name="version_positive"),
+)
+
+# Статистика угадываний (ADR 0076, миграция 0005): счётчики, а не журнал ответов.
+# Без FK на media_items: счётчик не должен ломать обработку события из-за гонки импорта.
+content_mode_stats = Table(
+    "content_mode_stats",
+    _md,
+    Column("media_item_id", Uuid(as_uuid=True), nullable=False),
+    Column("mode_key", String(100), nullable=False),
+    Column("shown", BigInteger, nullable=False, server_default=text("0")),
+    Column("exact", BigInteger, nullable=False, server_default=text("0")),
+    Column("partial", BigInteger, nullable=False, server_default=text("0")),
+    Column("miss", BigInteger, nullable=False, server_default=text("0")),
+    Column("gave_up", BigInteger, nullable=False, server_default=text("0")),
+    Column("time_sum_ms", BigInteger, nullable=False, server_default=text("0")),
+    Column("time_count", BigInteger, nullable=False, server_default=text("0")),
+    _ts("updated_at"),
+    PrimaryKeyConstraint("media_item_id", "mode_key"),
+    CheckConstraint(
+        "shown >= 0 AND exact >= 0 AND partial >= 0 AND miss >= 0 AND gave_up >= 0"
+        " AND time_sum_ms >= 0 AND time_count >= 0",
+        name="counters_non_negative",
+    ),
+    CheckConstraint("exact + partial + miss + gave_up = shown", name="outcomes_sum_to_shown"),
+    CheckConstraint("time_count <= exact", name="time_count_within_exact"),
+    Index("ix_content_mode_stats_mode_shown", "mode_key", "shown"),
+)
+
+content_mode_buckets = Table(
+    "content_mode_buckets",
+    _md,
+    Column("media_item_id", Uuid(as_uuid=True), nullable=False),
+    Column("mode_key", String(100), nullable=False),
+    Column("kind", String(8), nullable=False),
+    Column("bucket", Integer, nullable=False),
+    Column("n", BigInteger, nullable=False, server_default=text("0")),
+    PrimaryKeyConstraint("media_item_id", "mode_key", "kind", "bucket"),
+    ForeignKeyConstraint(
+        ["media_item_id", "mode_key"],
+        ["content_mode_stats.media_item_id", "content_mode_stats.mode_key"],
+        ondelete="CASCADE",
+    ),
+    CheckConstraint("kind IN ('level', 'time')", name="kind_known"),
+    CheckConstraint("bucket >= 0 AND n >= 0", name="non_negative"),
 )
 
 import_jobs = Table(

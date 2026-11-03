@@ -19,6 +19,7 @@ from catalog_service.application.commands.admin import (
 from catalog_service.application.commands.imports import RequestImport
 from catalog_service.application.commands.republish import RequestRepublish
 from catalog_service.application.ports import RateLimiter
+from catalog_service.application.queries.content_stats import EasiestContent
 from catalog_service.application.queries.search import (
     Autocomplete,
     GetImport,
@@ -104,4 +105,9 @@ class CatalogServices(Protocol):
     @property
     def request_republish(self) -> RequestRepublish:
         """Постановка переопубликации."""
+        ...
+
+    @property
+    def easiest_content(self) -> EasiestContent:
+        """Отчёт по статистике угадываний."""
         ...

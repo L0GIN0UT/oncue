@@ -33,6 +33,7 @@ from catalog_service.application.commands.imports import (
 )
 from catalog_service.application.commands.republish import RequestRepublish, RunRepublishBatch
 from catalog_service.application.ports import ImportEntrySource, MusicMetadataProvider
+from catalog_service.application.queries.content_stats import EasiestContent, ReportLimits
 from catalog_service.application.queries.search import (
     Autocomplete,
     GetImport,
@@ -41,6 +42,7 @@ from catalog_service.application.queries.search import (
     Search,
     SearchLimits,
 )
+from catalog_service.domain.content_stats import StatsRules
 from catalog_service.domain.import_job import ImportSource
 from catalog_service.domain.normalization import NormalizerConfig, TitleNormalizer
 from catalog_service.infrastructure.clients.music import (
@@ -334,6 +336,31 @@ class CatalogContainer:
     def approve_clue_texts(self) -> ApproveClueTexts:
         """Одобрение текстов загадок."""
         return ApproveClueTexts(self.uow, None)
+
+    @property
+    def stats_rules(self) -> StatsRules:
+        """Правила учёта угадываний из настроек (ADR 0076)."""
+        s = self.settings.stats
+        return StatsRules(
+            time_bucket_ms=s.time_bucket_ms,
+            time_bucket_max=s.time_bucket_max,
+            match_counted_finishes=frozenset(s.match_counted_finishes),
+            count_aborted_matches=s.count_aborted_matches,
+        )
+
+    @cached_property
+    def easiest_content(self) -> EasiestContent:
+        """Отчёт «самые лёгкие единицы»."""
+        s = self.settings.stats
+        return EasiestContent(
+            self.uow,
+            ReportLimits(
+                min_shown=s.report_min_shown,
+                limit_default=s.report_limit_default,
+                limit_max=s.report_limit_max,
+                time_bucket_ms=s.time_bucket_ms,
+            ),
+        )
 
     @cached_property
     def request_republish(self) -> RequestRepublish:

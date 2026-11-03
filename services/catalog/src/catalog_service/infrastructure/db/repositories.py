@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import uuid
 from collections import defaultdict
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Any, Self
 
-from sqlalchemy import Row, delete, exists, func, insert, select, update
+from sqlalchemy import Float, Row, cast, delete, exists, func, insert, select, tuple_, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -15,10 +15,12 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from catalog_service.application.dto import (
     AdminItemFilter,
     ClueStatus,
+    ContentStatsRow,
     ItemSummary,
     RecordedAction,
 )
 from catalog_service.domain.clue_texts import ApprovedClueTexts, ClueTexts, ClueTextStatus
+from catalog_service.domain.content_stats import StatsDelta, StatsKey
 from catalog_service.domain.import_job import ImportCounters, ImportJob, ImportSource, ImportStatus
 from catalog_service.domain.media_item import MediaItem
 from catalog_service.domain.model import (
@@ -41,6 +43,8 @@ from catalog_service.infrastructure.db.tables import (
     admin_actions,
     aliases,
     clue_texts,
+    content_mode_buckets,
+    content_mode_stats,
     external_refs,
     genres,
     idempotency_keys,
@@ -670,6 +674,110 @@ class SqlRepublishJobRepository:
         }
 
 
+class SqlContentStatsRepository:
+    """``ContentStatsRepository`` на PostgreSQL: инкременты через ``ON CONFLICT DO UPDATE``."""
+
+    _COUNTERS = ("shown", "exact", "partial", "miss", "gave_up", "time_sum_ms", "time_count")
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._s = session
+
+    async def add(self, deltas: Mapping[StatsKey, StatsDelta]) -> None:
+        """Прибавить инкременты.
+
+        Ключи сортируются: параллельные потребители берут блокировки строк в одном
+        порядке и не взаимоблокируются.
+        """
+        if not deltas:
+            return
+        keys = sorted(deltas, key=lambda k: (str(k[0]), k[1]))
+        stats = content_mode_stats
+        rows = [
+            {"media_item_id": k[0], "mode_key": k[1]}
+            | {c: getattr(deltas[k], c) for c in self._COUNTERS}
+            for k in keys
+        ]
+        stmt = pg_insert(stats).values(rows)
+        await self._s.execute(
+            stmt.on_conflict_do_update(
+                index_elements=[stats.c.media_item_id, stats.c.mode_key],
+                set_={c: stats.c[c] + stmt.excluded[c] for c in self._COUNTERS}
+                | {"updated_at": func.now()},
+            )
+        )
+        buckets = [
+            {"media_item_id": k[0], "mode_key": k[1], "kind": kind, "bucket": b, "n": n}
+            for k in keys
+            for kind, counts in (
+                ("level", deltas[k].level_buckets),
+                ("time", deltas[k].time_buckets),
+            )
+            for b, n in sorted(counts.items())
+        ]
+        if buckets:
+            t = content_mode_buckets
+            bstmt = pg_insert(t).values(buckets)
+            await self._s.execute(
+                bstmt.on_conflict_do_update(
+                    index_elements=[t.c.media_item_id, t.c.mode_key, t.c.kind, t.c.bucket],
+                    set_={"n": t.c.n + bstmt.excluded.n},
+                )
+            )
+
+    async def easiest(
+        self, *, min_shown: int, limit: int, mode_key: str | None, domain: str | None
+    ) -> list[ContentStatsRow]:
+        """Пары с показами не меньше ``min_shown`` по убыванию доли точных ответов."""
+        s = content_mode_stats
+        stmt = (
+            select(s, media_items.c.title, media_items.c.domain)
+            .join(media_items, media_items.c.id == s.c.media_item_id)
+            .where(s.c.shown >= min_shown)
+            .order_by(
+                (cast(s.c.exact, Float) / s.c.shown).desc(),
+                s.c.shown.desc(),
+                s.c.media_item_id,
+                s.c.mode_key,
+            )
+            .limit(limit)
+        )
+        if mode_key is not None:
+            stmt = stmt.where(s.c.mode_key == mode_key)
+        if domain is not None:
+            stmt = stmt.where(media_items.c.domain == domain)
+        found = (await self._s.execute(stmt)).all()
+        if not found:
+            return []
+        b = content_mode_buckets
+        pairs = [(r.media_item_id, r.mode_key) for r in found]
+        by_pair: dict[tuple[uuid.UUID, str], dict[str, dict[int, int]]] = defaultdict(
+            lambda: {"level": {}, "time": {}}
+        )
+        bucket_rows = await self._s.execute(
+            select(b).where(tuple_(b.c.media_item_id, b.c.mode_key).in_(pairs))
+        )
+        for br in bucket_rows.all():
+            by_pair[(br.media_item_id, br.mode_key)][br.kind][br.bucket] = br.n
+        return [
+            ContentStatsRow(
+                media_item_id=r.media_item_id,
+                mode_key=r.mode_key,
+                title=r.title,
+                domain=r.domain,
+                shown=r.shown,
+                exact=r.exact,
+                partial=r.partial,
+                miss=r.miss,
+                gave_up=r.gave_up,
+                time_sum_ms=r.time_sum_ms,
+                time_count=r.time_count,
+                level_buckets=by_pair[(r.media_item_id, r.mode_key)]["level"],
+                time_buckets=by_pair[(r.media_item_id, r.mode_key)]["time"],
+            )
+            for r in found
+        ]
+
+
 class CatalogSqlUnitOfWork(SqlAlchemyUnitOfWork):
     """Unit of Work catalog: транзакция, outbox и репозитории на её сессии."""
 
@@ -681,6 +789,7 @@ class CatalogSqlUnitOfWork(SqlAlchemyUnitOfWork):
     clue_status: SqlClueStatusRepository
     clue_texts: SqlClueTextsRepository
     republish: SqlRepublishJobRepository
+    content_stats: SqlContentStatsRepository
 
     def __init__(
         self,
@@ -703,4 +812,5 @@ class CatalogSqlUnitOfWork(SqlAlchemyUnitOfWork):
         self.clue_status = SqlClueStatusRepository(session)
         self.clue_texts = SqlClueTextsRepository(session)
         self.republish = SqlRepublishJobRepository(session)
+        self.content_stats = SqlContentStatsRepository(session)
         return self

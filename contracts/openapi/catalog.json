@@ -515,6 +515,118 @@
         "title": "ClueTextsOut",
         "type": "object"
       },
+      "DifficultyOut": {
+        "description": "Единица в режиме: сколько раз показана и как часто угадана.",
+        "properties": {
+          "avg_time_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Среднее время точного ответа",
+            "title": "Avg Time Ms"
+          },
+          "domain": {
+            "$ref": "#/components/schemas/MediaDomain"
+          },
+          "exact": {
+            "title": "Exact",
+            "type": "integer"
+          },
+          "exact_by_level": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "description": "Точные ответы по уровням: {уровень: число}",
+            "title": "Exact By Level",
+            "type": "object"
+          },
+          "exact_rate": {
+            "description": "Доля точных ответов: exact / shown",
+            "title": "Exact Rate",
+            "type": "number"
+          },
+          "gave_up": {
+            "title": "Gave Up",
+            "type": "integer"
+          },
+          "media_item_id": {
+            "format": "uuid",
+            "title": "Media Item Id",
+            "type": "string"
+          },
+          "median_time_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Приближённая медиана (по корзинам гистограммы, точность - полширины корзины); для ответов дольше последней корзины - её середина, то есть оценка снизу",
+            "title": "Median Time Ms"
+          },
+          "miss": {
+            "title": "Miss",
+            "type": "integer"
+          },
+          "mode_key": {
+            "title": "Mode Key",
+            "type": "string"
+          },
+          "partial": {
+            "title": "Partial",
+            "type": "integer"
+          },
+          "shown": {
+            "title": "Shown",
+            "type": "integer"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "media_item_id",
+          "mode_key",
+          "title",
+          "domain",
+          "shown",
+          "exact",
+          "partial",
+          "miss",
+          "gave_up",
+          "exact_rate",
+          "avg_time_ms",
+          "median_time_ms",
+          "exact_by_level"
+        ],
+        "title": "DifficultyOut",
+        "type": "object"
+      },
+      "DifficultyReport": {
+        "description": "Отчёт «самые лёгкие единицы».",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/DifficultyOut"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "DifficultyReport",
+        "type": "object"
+      },
       "ImportCounters": {
         "description": "Счётчики задания.",
         "properties": {
@@ -2446,6 +2558,142 @@
           }
         },
         "summary": "Разблокировать",
+        "tags": [
+          "catalog-admin"
+        ]
+      }
+    },
+    "/admin/v1/stats/easiest-content": {
+      "get": {
+        "description": "Единицы с наибольшей долей точных ответов при показах не меньше порога (по умолчанию GV_STATS__REPORT_MIN_SHOWN). Статистика не используется в подборе.",
+        "operationId": "easiest_content_admin_v1_stats_easiest_content_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "mode_key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 100,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Mode Key"
+            }
+          },
+          {
+            "in": "query",
+            "name": "domain",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/MediaDomain"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Domain"
+            }
+          },
+          {
+            "in": "query",
+            "name": "min_shown",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Min Shown"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DifficultyReport"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          }
+        },
+        "summary": "Самые угадываемые единицы",
         "tags": [
           "catalog-admin"
         ]

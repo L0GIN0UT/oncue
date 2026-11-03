@@ -1,4 +1,4 @@
-# Рейтинговая дуэль (music, классика): подбор из очереди ladder-а `music` (ADR 0038). Правила — как у `music.duel.classic`; шаблон находится по `session.ranked` + `session.ladder` + `answer.format`.
+# Рейтинговая дуэль (music, классика): подбор из очереди ladder-а `music` (ADR 0038). Правила — как у `music.duel.classic`, но пул мягче: верхняя половина по популярности и веса sqrt (ADR 0075); шаблон находится по `session.ranked` + `session.ladder` + `answer.format`.
 # clue.params и очки — как у обычной дуэли (профили media-pipeline те же, D7).
 key: music.ranked.classic
 title_i18n: modes.music.ranked.classic.title
@@ -11,6 +11,8 @@ source:
       kinds:
       - track
       min_playable: 20
+      popularity_top_pct: 50
+      popularity_weight: sqrt
 clue:
   type: audio_intro
   params:

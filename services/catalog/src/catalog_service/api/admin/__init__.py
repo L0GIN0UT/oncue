@@ -176,6 +176,35 @@ class RepublishRequest(BaseModel):
     reason: Reason
 
 
+class DifficultyOut(BaseModel):
+    """Единица в режиме: сколько раз показана и как часто угадана."""
+
+    media_item_id: uuid.UUID
+    mode_key: str
+    title: str
+    domain: MediaDomain
+    shown: int
+    exact: int
+    partial: int
+    miss: int
+    gave_up: int
+    exact_rate: float = Field(description="Доля точных ответов: exact / shown")
+    avg_time_ms: int | None = Field(description="Среднее время точного ответа")
+    median_time_ms: int | None = Field(
+        description=(
+            "Приближённая медиана (по корзинам гистограммы, точность - полширины корзины); "
+            "для ответов дольше последней корзины - её середина, то есть оценка снизу"
+        )
+    )
+    exact_by_level: dict[int, int] = Field(description="Точные ответы по уровням: {уровень: число}")
+
+
+class DifficultyReport(BaseModel):
+    """Отчёт «самые лёгкие единицы»."""
+
+    items: list[DifficultyOut]
+
+
 class RepublishOut(BaseModel):
     """Задача переопубликации поставлена."""
 
@@ -208,6 +237,28 @@ def build_admin_router(c: CatalogServices) -> APIRouter:
             items=[AdminItemSummary(**vars_of(i)) for i in page.items],
             next_cursor=page.next_cursor,
         )
+
+    @router.get(
+        "/stats/easiest-content",
+        response_model=DifficultyReport,
+        summary="Самые угадываемые единицы",
+        description=(
+            "Единицы с наибольшей долей точных ответов при показах не меньше порога "
+            "(по умолчанию GV_STATS__REPORT_MIN_SHOWN). Статистика не используется в подборе."
+        ),
+        responses=_READ,
+    )
+    async def easiest_content(
+        _: Viewer,
+        mode_key: Annotated[str | None, Query(max_length=100)] = None,
+        domain: MediaDomain | None = None,
+        min_shown: Annotated[int | None, Query(ge=1)] = None,
+        limit: Annotated[int | None, Query(ge=1)] = None,
+    ) -> DifficultyReport:
+        rows = await c.easiest_content(
+            mode_key=mode_key, domain=domain, min_shown=min_shown, limit=limit
+        )
+        return DifficultyReport(items=[DifficultyOut(**vars_of(r)) for r in rows])
 
     @router.get(
         "/items/{item_id}",
