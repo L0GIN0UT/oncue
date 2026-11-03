@@ -1,21 +1,21 @@
 "use client";
 /**
  * Ответ раунда (после угадывания, пропуска или последней ошибки): модалка поверх затемнённой игры.
- * Цветная шапка с исходом, картинка (кадр финальной подсказки; пока бэкенд не отдаёт обложки и
- * постеры — плашка-заглушка), «Это был», название, исполнитель или режиссёр, год, плитки «попытка»
+ * Цветная шапка с исходом, картинка (обложка или постер `reveal.artwork`; нет её — кадр финальной подсказки, а без
+ * него плашка-заглушка), «Это был», название, исполнитель или режиссёр, год, плитки «попытка»
  * и «очки», сохранение и «Продолжить» («К итогам» в последнем раунде). Пробел и Enter продолжают.
  * Данные ответа есть только у завершённого раунда (D11). У сетки (`presentation: bracket`)
  * ответа нет — модалка показывает сделанный выбор и долю согласных (`stats.agree_pct`).
  */
 import { useEffect, useState, type ComponentType, type MouseEvent } from "react";
 import { useTranslations } from "next-intl";
-import { Film, Music, Users, X } from "lucide-react";
+import { Users, X } from "lucide-react";
 import type { Domain, MoveStats, Presentation, RoundOut } from "@/shared/api/types";
 import { Button } from "@/shared/ui/button";
-import { Cover } from "@/shared/ui/cover";
 import { Modal } from "@/shared/ui/modal";
 import { StatTile } from "@/shared/ui/stat-tile";
 import { cn } from "@/shared/lib/cn";
+import { AnswerArt } from "./AnswerArt";
 import { roundOutcome } from "./levels";
 import { Metric } from "./Metric";
 import { RevealSave } from "./RevealSave";
@@ -164,7 +164,7 @@ function AnswerBody({ sessionId, round, stats, domain }: BodyProps) {
   if (!reveal) {
     return (
       <div className="flex flex-col items-center gap-4 text-center">
-        <Art domain={domain} />
+        <AnswerArt domain={domain} />
         <p className="text-ink-muted" data-testid="reveal-void">
           {t("game.reveal.voidText")}
         </p>
@@ -251,21 +251,10 @@ function AgreePct({ pct }: { pct: number }) {
   );
 }
 
-/** Заглушка и картинка ответа: обложка 1:1 у музыки (220 px), постер 2:3 у кино (180 px). */
-function Art({ domain, src, alt = "" }: { domain: Domain; src?: string | null; alt?: string }) {
-  const Icon = domain === "film" ? Film : Music;
-  return (
-    <Cover
-      src={src}
-      alt={alt}
-      ratio={domain === "film" ? "poster" : "square"}
-      placeholder={<Icon className="size-12" aria-hidden />}
-      className={cn("rounded-[14px]", domain === "film" ? "w-[180px]" : "w-[220px]")}
-    />
-  );
-}
-
-/** Кадр финальной подсказки, если он есть; аудио в модалке не играет — плашка. */
+/**
+ * Обложка или постер ответа (`artwork`); нет его — кадр финальной подсказки, если он есть;
+ * иначе заглушка (аудио в модалке не играет).
+ */
 function FinalArt({
   sessionId,
   round,
@@ -278,9 +267,12 @@ function FinalArt({
   title: string;
 }) {
   const t = useTranslations();
+  const artwork = round.reveal?.artwork ?? null;
   const initial = round.reveal?.final_clue ?? null;
-  const frame = initial?.kind === "image" ? initial : null;
+  // Кадр качаем, только когда обложки нет: с обложкой он не нужен.
+  const frame = !artwork && initial?.kind === "image" ? initial : null;
   const { objectUrl } = useFinalClue(sessionId, round.index, frame);
+  if (artwork) return <AnswerArt domain={domain} artwork={artwork} title={title} />;
   if (frame && objectUrl) {
     return (
       // eslint-disable-next-line @next/next/no-img-element -- blob: скачанного ассета ответа раунда
@@ -294,7 +286,7 @@ function FinalArt({
   }
   return (
     <div className="relative">
-      <Art domain={domain} />
+      <AnswerArt domain={domain} />
       {frame && (
         <span className="sr-only" role="status">
           {t("game.reveal.clueLoading")}
