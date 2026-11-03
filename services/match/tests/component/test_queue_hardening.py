@@ -289,7 +289,9 @@ async def test_spectator_subscription_is_revoked_when_match_ends(svc: MatchApp) 
     await svc.enter(a)
     await svc.enter(b)
     code = (await svc.queue_state(a, _matched))["room_code"]
+    assert (await svc.queue_state(b, _matched))["room_code"] == code  # сигнал второго игрока
     svc.online.update((a.user_id, b.user_id))
+    await svc.sync(code)  # ворота пары открыты до сдвига часов
     svc.clock.advance(seconds=3)
     await svc.phase(a, code, "level_open")
     watcher = svc.user(perms=["match.spectate"])

@@ -670,7 +670,13 @@ class QueueTicket(BaseModel):
 
     ladder: LadderKey
     format: QueueFormat
-    state: QueueState
+    state: QueueState = Field(
+        description=(
+            "`searching` — ищем соперника; `matched` — пара найдена (`room_code`), читается и "
+            "после старта матча. Отсутствие записи (срок истёк) — не состояние, а 404 "
+            "`match.not_in_queue`."
+        )
+    )
     entered_at: datetime
     tick_s: int | None = Field(
         default=None,
@@ -683,7 +689,12 @@ class QueueTicket(BaseModel):
         description="Ждёт дольше `slow_hint_after_s`: показать «ищем дольше обычного»"
     )
     room_code: RoomCode | None = Field(
-        default=None, description="Комната дуэли, когда `state = matched` (сразу в `countdown`)"
+        default=None,
+        description=(
+            "Комната дуэли, когда `state = matched` (`countdown`, пока оба не подали первый "
+            "сигнал; не подал за `GV_MATCH__PAIR_GRACE_S` — комната закрывается `no_show`, "
+            "пришедший возвращается в `searching` с прежним `entered_at`)"
+        ),
     )
 
 

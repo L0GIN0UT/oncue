@@ -623,7 +623,8 @@ def build_public_router(services: ServicesProvider) -> APIRouter:  # noqa: PLR09
         summary="Встать в очередь",
         description=(
             "Рейтинговая дуэль 1×1 по ladder-у и формату; в очереди ровно одна запись на игрока "
-            "(повтор с тем же ключом или тем же ladder/format — то же состояние). Рейтинг для "
+            "(повтор с тем же ключом или тем же ladder/format — то же состояние; если пара уже "
+            "найдена или матч идёт — `matched` с `room_code`, а не 409). Рейтинг для "
             "подбора — из проекции `rating.RatingChanged` (синхронного вызова rating нет). "
             "Допускается любой аккаунт; штрафов по времени нет. Ошибки: 403 "
             "`match.ranked_forbidden` (санкция `RANKED`), 404 `match.ladder_not_found`, 422 "
@@ -643,9 +644,14 @@ def build_public_router(services: ServicesProvider) -> APIRouter:  # noqa: PLR09
         response_model=QueueTicket,
         summary="Состояние очереди (heartbeat)",
         description=(
-            "Раз в `GV_MATCH__TICK_S`: продлевает запись в очереди и отдаёт состояние; при "
-            "`matched` — код комнаты. Нет записи (истёк heartbeat или игрок вышел) — 404 "
-            "`match.not_in_queue`; 429 `match.rate_limited`."
+            "Раз в `GV_MATCH__TICK_S`: продлевает запись в очереди и отдаёт состояние. Состояния "
+            "билета: `searching` — ищем соперника; `matched` — пара найдена, `room_code` — "
+            "комната (подать первый сигнал в ней нужно за `GV_MATCH__PAIR_GRACE_S`, иначе "
+            "`no_show`); `matched` остаётся читаемым `GV_MATCH__QUEUE_FOUND_TTL_S` после старта "
+            "матча, пока жива комната. «Срок истёк» (heartbeat пропущен, игрок вышел, комната "
+            "закрыта, пара не состоялась) — 404 `match.not_in_queue`: клиент спрашивает "
+            "`GET /rooms/active` и только потом решает, что поиск окончен. 429 "
+            "`match.rate_limited`."
         ),
         responses=problem_responses(401, 403, 404, 429),
     )

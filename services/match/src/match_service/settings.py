@@ -85,6 +85,13 @@ class MatchSettings(BaseModel):
         queue_ttl_s: Запись в очереди без heartbeat (``POST /queue/tick``) исчезает через
             столько секунд; не меньше двух ``tick_s`` (один пропуск не выбивает из очереди).
         queue_matched_ttl_s: Сколько живёт запись игрока после подбора (идёт в комнату).
+        queue_found_ttl_s: Сколько после старта матча запись игрока остаётся читаемой
+            (``tick`` отвечает ``matched`` с кодом комнаты, а не 404: клиент, чей тик пришёл
+            уже после старта, всё равно узнаёт о найденной паре).
+        pair_grace_s: Сколько найденной паре даётся на первый сигнал в комнате (``tick`` или
+            ``realtime-token`` каждого игрока). Не подал — комната закрывается с причиной
+            ``no_show`` без штрафа и записи матча, подключившийся возвращается в поиск;
+            до этого отсчёт ждёт обоих, а отключение по присутствию не считается. 0 — выключено.
         queue_reserved_ttl_s: Жизнь записи с зарезервированной парой, пока создаётся комната
             (короче ``queue_matched_ttl_s``; ``tick`` её продлевает).
         queue_reserved_stale_s: Резерв старше этого срока считается брошенным упавшим матчером:
@@ -171,6 +178,8 @@ class MatchSettings(BaseModel):
     default_start_rating: int = Field(default=1000, ge=0)
     queue_ttl_s: float = Field(default=20, gt=0, le=600)
     queue_matched_ttl_s: float = Field(default=120, gt=0, le=3600)
+    queue_found_ttl_s: float = Field(default=60, gt=0, le=3600)
+    pair_grace_s: int = Field(default=30, ge=0, le=300)
     queue_reserved_ttl_s: float = Field(default=30, gt=0, le=600)
     queue_reserved_stale_s: float = Field(default=10, gt=0, le=600)
     rate_window_s: int = Field(default=60, ge=1, le=3600)

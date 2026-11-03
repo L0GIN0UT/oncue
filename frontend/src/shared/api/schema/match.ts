@@ -170,7 +170,7 @@ export interface paths {
         put?: never;
         /**
          * Встать в очередь
-         * @description Рейтинговая дуэль 1×1 по ladder-у и формату; в очереди ровно одна запись на игрока (повтор с тем же ключом или тем же ladder/format — то же состояние). Рейтинг для подбора — из проекции `rating.RatingChanged` (синхронного вызова rating нет). Допускается любой аккаунт; штрафов по времени нет. Ошибки: 403 `match.ranked_forbidden` (санкция `RANKED`), 404 `match.ladder_not_found`, 422 `match.queue_format_unavailable`, 409 `match.active_room_conflict` (`details.code` — комната, `details.queue` — другая очередь), 409 `idempotency.key_reused`, 429 `match.rate_limited`, 503 `match.game_unavailable`.
+         * @description Рейтинговая дуэль 1×1 по ladder-у и формату; в очереди ровно одна запись на игрока (повтор с тем же ключом или тем же ladder/format — то же состояние; если пара уже найдена или матч идёт — `matched` с `room_code`, а не 409). Рейтинг для подбора — из проекции `rating.RatingChanged` (синхронного вызова rating нет). Допускается любой аккаунт; штрафов по времени нет. Ошибки: 403 `match.ranked_forbidden` (санкция `RANKED`), 404 `match.ladder_not_found`, 422 `match.queue_format_unavailable`, 409 `match.active_room_conflict` (`details.code` — комната, `details.queue` — другая очередь), 409 `idempotency.key_reused`, 429 `match.rate_limited`, 503 `match.game_unavailable`.
          */
         post: operations["queue_enter_v1_queue_enter_post"];
         delete?: never;
@@ -230,7 +230,7 @@ export interface paths {
         put?: never;
         /**
          * Состояние очереди (heartbeat)
-         * @description Раз в `GV_MATCH__TICK_S`: продлевает запись в очереди и отдаёт состояние; при `matched` — код комнаты. Нет записи (истёк heartbeat или игрок вышел) — 404 `match.not_in_queue`; 429 `match.rate_limited`.
+         * @description Раз в `GV_MATCH__TICK_S`: продлевает запись в очереди и отдаёт состояние. Состояния билета: `searching` — ищем соперника; `matched` — пара найдена, `room_code` — комната (подать первый сигнал в ней нужно за `GV_MATCH__PAIR_GRACE_S`, иначе `no_show`); `matched` остаётся читаемым `GV_MATCH__QUEUE_FOUND_TTL_S` после старта матча, пока жива комната. «Срок истёк» (heartbeat пропущен, игрок вышел, комната закрыта, пара не состоялась) — 404 `match.not_in_queue`: клиент спрашивает `GET /rooms/active` и только потом решает, что поиск окончен. 429 `match.rate_limited`.
          */
         post: operations["queue_tick_v1_queue_tick_post"];
         delete?: never;
@@ -1497,7 +1497,7 @@ export interface components {
             ladder: string;
             /**
              * Room Code
-             * @description Комната дуэли, когда `state = matched` (сразу в `countdown`)
+             * @description Комната дуэли, когда `state = matched` (`countdown`, пока оба не подали первый сигнал; не подал за `GV_MATCH__PAIR_GRACE_S` — комната закрывается `no_show`, пришедший возвращается в `searching` с прежним `entered_at`)
              */
             room_code?: string | null;
             /**
@@ -1507,6 +1507,7 @@ export interface components {
             slow: boolean;
             /**
              * State
+             * @description `searching` — ищем соперника; `matched` — пара найдена (`room_code`), читается и после старта матча. Отсутствие записи (срок истёк) — не состояние, а 404 `match.not_in_queue`.
              * @enum {string}
              */
             state: "searching" | "matched";

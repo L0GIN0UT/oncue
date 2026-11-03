@@ -173,6 +173,10 @@ class Room:
     ops: dict[str, dict[str, dict[str, Any]]] = field(default_factory=dict)  # Any: итог
     schema_version: int = SCHEMA_VERSION
     start_error: tuple[str, int] | None = None
+    pair_deadline_ms: int | None = None
+    """Комната найденной пары: до этого момента оба должны подать первый сигнал (``tick`` или
+    ``realtime-token``). Пока срок стоит, отсчёт ждёт обоих, а присутствие не считается;
+    когда оба на связи — поле сбрасывается, иначе владелец закрывает комнату ``no_show``."""
     forgotten: set[UUID] = field(default_factory=set)
     changes: list[Change] = field(default_factory=list)
 
@@ -325,6 +329,9 @@ class Room:
         if seat is None or seat.presence is not Presence.DISCONNECTED:
             return False
         seat.presence = Presence.ONLINE
+        # Вернувшийся на связь - уже не «отошёл»: ручная отметка не должна пережить обрыв и
+        # висеть у соперника (пункт 61); дельта ``player`` несёт оба поля сразу.
+        seat.away = False
         self.touch(now_ms)
         self.emit("player", user_id=str(user_id))
         return True

@@ -72,6 +72,12 @@ redis.call('PEXPIRE', KEYS[1], ARGV[3])
 redis.call('ZREM', KEYS[2], ARGV[1])
 return 1
 """
+_RETAIN = """
+if redis.call('HGET', KEYS[1], 'state') ~= 'matched' then return 0 end
+if redis.call('HGET', KEYS[1], 'room') ~= ARGV[1] then return 0 end
+redis.call('PEXPIRE', KEYS[1], ARGV[2])
+return 1
+"""
 _SET_ROOM = """
 if redis.call('HGET', KEYS[1], 'room') == ARGV[1] then
   redis.call('HSET', KEYS[1], 'room', ARGV[2])
@@ -133,14 +139,25 @@ class RedisQueue:
         reserved_ttl_ms: Жизнь записи с зарезервированной парой (короче ``matched_ttl_ms``:
             комната создаётся за миллисекунды, зависший резерв не должен жить долго).
         matched_ttl_ms: Жизнь записи после подбора (игрок идёт в комнату).
+        found_ttl_ms: Сколько запись ``matched`` остаётся читаемой после старта матча
+            (``retain``): тик, пришедший позже старта, видит найденную пару, а не 404.
     """
 
     def __init__(
-        self, redis: Redis, *, ttl_ms: int, matched_ttl_ms: int, reserved_ttl_ms: int | None = None
+        self,
+        redis: Redis,
+        *,
+        ttl_ms: int,
+        matched_ttl_ms: int,
+        reserved_ttl_ms: int | None = None,
+        found_ttl_ms: int | None = None,
     ) -> None:
         self._redis = redis
         self._ttl_ms = ttl_ms
         self._matched_ttl_ms = matched_ttl_ms
+        # Контейнер всегда передаёт ``queue_found_ttl_s``; без него - как у записи после подбора.
+        self._found_ttl_ms = found_ttl_ms if found_ttl_ms is not None else matched_ttl_ms
+        self._retain = redis.register_script(_RETAIN)
         self._reserved_ttl_ms = reserved_ttl_ms if reserved_ttl_ms is not None else ttl_ms
         self._enter = redis.register_script(_ENTER)
         self._touch = redis.register_script(_TOUCH)
@@ -307,6 +324,16 @@ class RedisQueue:
                 ],
                 args=[code, self._ttl_ms, str(user_id), failures, retry_at_ms],
             )
+        )
+
+    async def retain(self, user_id: UUID, code: str) -> bool:
+        """Матч начался: запись ``matched`` не удаляется, а живёт ещё ``found_ttl_ms``.
+
+        Клиент, чей ``tick`` пришёл после старта, всё ещё получает ``matched`` с кодом комнаты
+        (иначе 404 читался как «вас убрали из очереди», хотя пара найдена).
+        """
+        return bool(
+            await self._retain(keys=[keys.queue_player(user_id)], args=[code, self._found_ttl_ms])
         )
 
     async def release(self, user_id: UUID, code: str) -> None:

@@ -103,6 +103,24 @@ async def test_only_the_lease_holder_can_reserve_a_pair_once(redis: Redis) -> No
     assert matched.room_code == "ROOM2222"
 
 
+async def test_retain_keeps_matched_record_readable_for_found_ttl_only(redis: Redis) -> None:
+    """Пункт 60: после старта матча запись живёт ``found_ttl`` (``matched``), не дольше."""
+    queue = RedisQueue(redis, ttl_ms=5000, matched_ttl_ms=5000, found_ttl_ms=300)
+    grant = await _lease(redis, "one").acquire(NAME)
+    assert grant is not None
+    a, b = await _players(queue, 1000, 1000)
+    await queue.reserve(_fence(grant.token), a, b, "ROOM2222", 1)
+    await queue.confirm("music", "classic", a, b, "ROOM2222")
+    assert await queue.retain(a, "OTHER333") is False  # чужая комната запись не продлевает
+    assert await queue.retain(a, "ROOM2222") is True
+    kept = await queue.get(a)
+    assert kept is not None and kept.state == "matched" and kept.room_code == "ROOM2222"
+    assert await queue.touch(a) is True  # тик запись читает и не возвращает в поиск
+    assert await redis.pttl("{mmq}:p:" + str(a)) <= 300
+    await asyncio.sleep(0.45)
+    assert await queue.get(a) is None  # найденная пара не вечна: дальше - «срок поиска истёк»
+
+
 async def test_lease_epoch_grows_after_loss_and_old_holder_is_fenced(redis: Redis) -> None:
     queue = RedisQueue(redis, ttl_ms=5000, matched_ttl_ms=5000)
     old, new = _lease(redis, "old", 200), _lease(redis, "new", 200)
