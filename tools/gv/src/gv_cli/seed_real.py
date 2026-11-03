@@ -24,6 +24,7 @@ from __future__ import annotations
 import hashlib
 import html
 import json
+import math
 import os
 import re
 import shutil
@@ -133,7 +134,7 @@ GENRE_TITLES: Mapping[str, str] = {
     "metal": "Метал",
     "jazz": "Джаз",
     "reggae": "Регги",
-    "classical": "Классика",
+    "classical": "Классическая музыка",
     "folk": "Фолк",
     "blues": "Блюз",
     "country": "Кантри",
@@ -155,6 +156,50 @@ GENRE_TITLES: Mapping[str, str] = {
 # Написания жанра из разных источников → общий ключ.
 GENRE_ALIASES: Mapping[str, str] = {"hiphop": "hip-hop", "hip hop": "hip-hop", "r&b": "rnb"}
 MUSIC_COVERS = ("vinyl", "neon", "night", "sunset", "forest", "ocean")
+# Сколько треков одного исполнителя пускать в сборник. Считаются все исполнители трека
+# (фиты тоже занимают слот), имена сравниваются без учёта регистра. Трек без исполнителя
+# не ограничивается. Общий лимит — для жанров и десятилетий, отдельный (строже) — для «Топа».
+MAX_TRACKS_PER_ARTIST = 3
+MAX_TRACKS_PER_ARTIST_TOP = 2
+# «Топ треков»: максимальная доля одного десятилетия (от размера сборника). Без квоты топ
+# заполняется свежими релизами (рейтинг Deezer — текущая популярность). Если после квот и
+# лимита на исполнителя не хватает до размера сборника, добор идёт по популярности без квот.
+TOP_DECADE_SHARE = 0.34
+# Музыкальные сборники по десятилетиям: (первый год десятилетия, ключ, название). Ключ
+# сборника — ``real-music-<ключ>``, ASCII. Треки без года или вне списка не попадают.
+MUSIC_DECADES: tuple[tuple[int, str, str], ...] = (
+    (1980, "1980s", "Хиты 80-х"),
+    (1990, "1990s", "Хиты 90-х"),
+    (2000, "2000s", "2000-е"),
+    (2010, "2010s", "2010-е"),
+    (2020, "2020s", "2020-е"),
+)
+# Всё, что вышло раньше первого десятилетия списка, объединяется в один сборник: по
+# отдельности 50-е/60-е/70-е не набирают минимума. Граница — первый год ``MUSIC_DECADES``.
+MUSIC_PRE_KEY = f"pre{MUSIC_DECADES[0][0]}"
+MUSIC_PRE_TITLE = f"Золотой век (до {MUSIC_DECADES[0][0]})"
+# Исполнители, которых нельзя пускать в жанровый сборник: Deezer ставит жанр по альбому,
+# и в «classical» попадают саундтреки и поп-исполнители с сборников «для работы/учёбы».
+# Ключ — ключ жанра (``slugify``), значение — имена в нижнем регистре (``casefold``).
+# Расширяется добавлением имени в множество.
+GENRE_EXCLUDED_ARTISTS: Mapping[str, frozenset[str]] = {
+    "classical": frozenset(
+        {
+            "pitbull", "bastille", "ramin djawadi", "imagine dragons", "ed sheeran", "adele",
+            "billie eilish", "lady gaga", "taylor swift", "coldplay", "the weeknd", "sia",
+            "ariana grande", "rihanna", "katy perry", "maroon 5", "dua lipa", "justin bieber",
+            "shawn mendes", "selena gomez", "miley cyrus", "ellie goulding", "sam smith",
+            "celine dion", "whitney houston", "queen", "lana del rey", "eminem", "kanye west",
+            "drake", "linkin park", "twenty one pilots", "lewis capaldi", "charlie puth",
+            "halsey", "pharrell williams", "kygo", "avicii", "calvin harris", "david guetta",
+            "camila cabello", "jason derulo", "bruno mars", "beyoncé", "post malone",
+            "doja cat", "demi lovato", "olivia rodrigo", "harry styles", "lorde", "hozier",
+            "idina menzel", "lin-manuel miranda", "auli'i cravalho", "john legend",
+            "christina perri", "james arthur", "passenger", "one republic", "onerepublic",
+            "the chainsmokers", "zayn", "ava max", "tones and i", "lizzo", "sabrina carpenter",
+        }
+    ),
+}  # fmt: skip
 FILM_COVERS = ("cinema", "sunset", "night", "popcorn")
 MUSIC_MODE = "music.collection.intro"
 FILM_MODE = "film.collection.frame"
@@ -207,6 +252,7 @@ class RealUnit:
         cover: Обложка альбома трека (роль ``cover``); ``None`` — обложки нет.
         poster: Постер фильма.
         frames: Кадры фильма по возрастанию позиции.
+        artists: Исполнители трека (персоны с ролью ``artist``); у кино пусто.
     """
 
     key: str
@@ -224,6 +270,7 @@ class RealUnit:
     cover: Path | None = None
     poster: Path | None = None
     frames: tuple[Path, ...] = ()
+    artists: tuple[str, ...] = ()
 
 
 # ---------------------------------------------------------------- разбор каталога
@@ -422,6 +469,11 @@ def build_units(real_dir: Path, *, tracks_limit: int | None = None) -> list[Real
             source_url=str(row.get("source_url") or ""),
             audio=Path(row["audio"]),
             cover=Path(row["cover"]) if row.get("cover") else None,
+            artists=tuple(
+                name
+                for p in row.get("persons") or ()
+                if p.get("role") == "artist" and (name := _clean(str(p.get("name") or "")))
+            ),
         )
         for row in load_track_rows(real_dir)[:tracks_limit]
     )
@@ -535,53 +587,158 @@ def _by_popularity(units: Iterable[RealUnit]) -> list[RealUnit]:
     return sorted(units, key=lambda u: (-(u.popularity or 0), -(u.rating or 0), u.key))
 
 
+def _artist_names(unit: RealUnit) -> set[str]:
+    """Исполнители трека без учёта регистра: единица счёта лимита и списка исключений."""
+    return {a.casefold() for a in unit.artists}
+
+
+def _pick_limited(
+    ranked: Iterable[RealUnit],
+    limit: int,
+    per_artist: int,
+    *,
+    taken: Sequence[RealUnit] = (),
+    allowed: Callable[[RealUnit], bool] = lambda _u: True,
+) -> list[RealUnit]:
+    """Дополнить ``taken`` до ``limit`` треками из ``ranked`` (по порядку) с лимитом на исполнителя.
+
+    ``allowed`` — дополнительное условие (квота десятилетия); вызывается последним и только
+    для треков, прошедших остальные проверки, а ``True`` означает, что трек будет взят
+    (поэтому ``allowed`` вправе занимать слот). Лимит исполнителя учитывает и уже взятые
+    ``taken``.
+    """
+    chosen = list(taken)
+    seen = {u.key for u in chosen}
+    counts: Counter[str] = Counter(n for u in chosen for n in _artist_names(u))
+    for unit in ranked:
+        if len(chosen) >= limit:
+            break
+        names = _artist_names(unit)
+        if unit.key in seen or any(counts[n] >= per_artist for n in names) or not allowed(unit):
+            continue
+        chosen.append(unit)
+        seen.add(unit.key)
+        counts.update(names)
+    return chosen
+
+
+def _decade_of(unit: RealUnit) -> int | None:
+    """Первый год десятилетия трека (1995 → 1990); без года — ``None``."""
+    return unit.year // 10 * 10 if unit.year else None
+
+
+def _top_tracks(tracks: Sequence[RealUnit], max_size: int, per_artist: int) -> list[RealUnit]:
+    """Топ: по популярности, с лимитом на исполнителя и долей десятилетия ``TOP_DECADE_SHARE``.
+
+    Нехватку до ``max_size`` добирает по популярности без квот десятилетий (лимит на
+    исполнителя сохраняется). Треки без года квоте не подчиняются.
+    """
+    ranked = _by_popularity(tracks)
+    cap = max(1, math.floor(max_size * TOP_DECADE_SHARE + 1e-9))
+    in_decade: Counter[int] = Counter()
+
+    def claim_decade_slot(unit: RealUnit) -> bool:
+        """Занять слот десятилетия трека; ``False`` — квота исчерпана."""
+        decade = _decade_of(unit)
+        if decade is None:
+            return True
+        if in_decade[decade] >= cap:
+            return False
+        in_decade[decade] += 1
+        return True
+
+    quota_pass = _pick_limited(ranked, max_size, per_artist, allowed=claim_decade_slot)
+    return _by_popularity(_pick_limited(ranked, max_size, per_artist, taken=quota_pass))
+
+
+def _decade_bucket(unit: RealUnit) -> str | None:
+    """Ключ сборника десятилетия (``MUSIC_DECADES``/``MUSIC_PRE_KEY``) или ``None``."""
+    if not unit.year:
+        return None
+    first_year = MUSIC_DECADES[0][0]
+    if unit.year < first_year:
+        return MUSIC_PRE_KEY
+    for start, key, _title in MUSIC_DECADES:
+        if start <= unit.year < start + 10:
+            return key
+    return None
+
+
+def _excluded(unit: RealUnit, genre_slug: str, excluded: Mapping[str, frozenset[str]]) -> bool:
+    """Есть ли среди исполнителей трека исключённый для жанра ``genre_slug``."""
+    return bool(_artist_names(unit) & excluded.get(genre_slug, frozenset()))
+
+
 def music_collections(
     units: Iterable[RealUnit],
     *,
     min_size: int = MIN_COLLECTION_ITEMS,
     max_size: int = COLLECTION_SIZE,
+    max_per_artist: int = MAX_TRACKS_PER_ARTIST,
+    max_per_artist_top: int = MAX_TRACKS_PER_ARTIST_TOP,
+    excluded_artists: Mapping[str, frozenset[str]] = GENRE_EXCLUDED_ARTISTS,
 ) -> list[CollectionSpec]:
-    """Музыкальные сборники: общий «Топ треков» и по сборнику на каждый жанр треков.
+    """Музыкальные сборники: «Топ треков», десятилетия и по сборнику на каждый жанр.
 
-    Жанр берётся по первому жанру трека; жанры с числом треков меньше ``min_size`` пропускаются.
-    Внутри сборника — по популярности (прослушиваниям). Жанры идут от самых крупных.
+    Порядок: топ → «Золотой век» → десятилетия по возрастанию → жанры (от самых крупных).
+    Внутри сборника — по популярности (прослушиваниям) с лимитом треков на исполнителя
+    (``max_per_artist``, у топа — ``max_per_artist_top``). Жанр берётся по первому жанру трека;
+    из жанрового сборника убираются исполнители из ``excluded_artists``. Сборник, в котором
+    после отбора меньше ``min_size`` треков, пропускается.
     """
     tracks = [u for u in units if u.domain == "music"]
     specs: list[CollectionSpec] = []
-    if len(tracks) >= min_size:
+
+    def add(key: str, title: str, description: str, items: Sequence[RealUnit]) -> None:
+        if len(items) < min_size:
+            return
         specs.append(
             CollectionSpec(
-                key=FEATURED_KEYS["music"],
-                title="Топ треков",
+                key=key,
+                title=title,
                 domain="music",
                 default_mode_key=MUSIC_MODE,
-                items=_items(_by_popularity(tracks)[:max_size]),
-                description="Угадайте трек по вступлению: самые популярные треки.",
-                cover=MUSIC_COVERS[0],
+                items=_items(items),
+                description=description,
+                cover=MUSIC_COVERS[len(specs) % len(MUSIC_COVERS)],
             )
+        )
+
+    add(
+        FEATURED_KEYS["music"],
+        "Топ треков",
+        "Угадайте трек по вступлению: самые популярные треки.",
+        _top_tracks(tracks, max_size, max_per_artist_top),
+    )
+    by_decade: dict[str, list[RealUnit]] = {}
+    for unit in tracks:
+        if (bucket := _decade_bucket(unit)) is not None:
+            by_decade.setdefault(bucket, []).append(unit)
+    decades = [(MUSIC_PRE_KEY, MUSIC_PRE_TITLE)] + [(k, t) for _s, k, t in MUSIC_DECADES]
+    for bucket, title in decades:
+        add(
+            f"real-music-{bucket}",
+            title,
+            f"Угадайте трек по вступлению: {title}.",
+            _pick_limited(_by_popularity(by_decade.get(bucket, ())), max_size, max_per_artist),
         )
     # Группировка по ключу сборника, а не по сырому жанру: «k-pop» и «k pop» дают один ключ.
     by_genre: dict[str, list[RealUnit]] = {}
     names: dict[str, str] = {}
     for unit in tracks:
         if unit.genres and (slug := slugify(unit.genres[0])):
-            by_genre.setdefault(slug, []).append(unit)
+            if not _excluded(unit, slug, excluded_artists):
+                by_genre.setdefault(slug, []).append(unit)
             names.setdefault(slug, unit.genres[0])
     fitting = [(g, u) for g, u in by_genre.items() if len(u) >= min_size]
     fitting.sort(key=lambda gu: (-len(gu[1]), gu[0]))
     for slug, members in fitting:
-        genre = names[slug]
-        title = GENRE_TITLES.get(genre, f"Жанр: {genre}")
-        specs.append(
-            CollectionSpec(
-                key=f"real-music-{slug}",
-                title=title,
-                domain="music",
-                default_mode_key=MUSIC_MODE,
-                items=_items(_by_popularity(members)[:max_size]),
-                description=f"Угадайте трек по вступлению: {title}.",
-                cover=MUSIC_COVERS[len(specs) % len(MUSIC_COVERS)],
-            )
+        title = GENRE_TITLES.get(names[slug], f"Жанр: {names[slug]}")
+        add(
+            f"real-music-{slug}",
+            title,
+            f"Угадайте трек по вступлению: {title}.",
+            _pick_limited(_by_popularity(members), max_size, max_per_artist),
         )
     return specs
 
