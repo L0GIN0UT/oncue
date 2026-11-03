@@ -35,7 +35,7 @@
       "description": "Комната закрыта; клиент отписывается (при реванше — переходит в rematch_code)",
       "properties": {
         "reason": {
-          "description": "Машинная причина: finished, idle, aborted, host_left и т. п.",
+          "description": "Машинная причина: finished, idle, aborted, host_left, no_show (рейтинговая пара: соперник не подал сигнал, клиент возвращается в поиск) и т. п.",
           "maxLength": 64,
           "pattern": "^[a-z][a-z0-9_.]*$",
           "type": "string"

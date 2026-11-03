@@ -284,6 +284,7 @@ class MatchContainer:
             ttl_ms=int(m.queue_ttl_s * MS),
             matched_ttl_ms=int(m.queue_matched_ttl_s * MS),
             reserved_ttl_ms=int(m.queue_reserved_ttl_s * MS),
+            found_ttl_ms=int(m.queue_found_ttl_s * MS),
         )
 
     @cached_property
@@ -446,6 +447,7 @@ class MatchContainer:
                 batch_max=m.queue_batch_max,
                 pending_room_ms=m.pending_room_ms,
                 reserved_stale_ms=int(m.queue_reserved_stale_s * MS),
+                pair_grace_ms=int(m.pair_grace_s * MS),
             ),
         )
 

@@ -210,6 +210,10 @@ class RoomQueries:
         if watching and self._spectators is not None:
             # Запомнить наблюдателя: по концу матча владелец отзовёт его подписку.
             await self._spectators.add(room.code, user_id, self._limits.spectator_ttl_s)
+        if not watching and not room.is_closed:
+            # Участник, запросивший токен, на связи: это и первый сигнал найденной пары
+            # (``pair_deadline_ms``), и возврат после обрыва - не ждём следующего ``tick``.
+            await self._presence.touch(room.code, user_id, self._now_ms())
         channel = f"room:{room.code}"
         token, expires = self._tokens.issue(user_id, channel, self._now())
         return {"channel": channel, "token": token, "expires_at": expires.isoformat()}

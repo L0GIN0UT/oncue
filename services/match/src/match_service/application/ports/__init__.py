@@ -513,7 +513,11 @@ class QueueStore(Protocol):
         ...
 
     async def release(self, user_id: UUID, code: str) -> None:
-        """Матч начался: убрать запись, если она за ``code``."""
+        """Убрать запись, если она за ``code`` (игрок ушёл, поиск прекращён)."""
+        ...
+
+    async def retain(self, user_id: UUID, code: str) -> bool:
+        """Матч начался: запись ``matched`` за ``code`` остаётся читаемой ещё ``found_ttl``."""
         ...
 
 

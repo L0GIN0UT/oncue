@@ -84,6 +84,9 @@ log = structlog.get_logger(__name__)
 RANKED_DROPS = Counter(
     "gv_match_ranked_countdown_dropped_total", "Игроки, сорвавшие отсчёт рейтинговой комнаты"
 )
+NO_SHOWS = Counter(
+    "gv_match_ranked_no_show_total", "Найденные пары, где игрок не подал сигнал за льготу"
+)
 PERSIST_FAILURES = Counter(
     "gv_match_persist_failures_total", "Неудачные записи начала или итога матча в Postgres"
 )
@@ -208,6 +211,7 @@ INTERNAL_ERROR = "match.unavailable"
 PERSIST_BACKOFF_S = 0.5
 PERSIST_BACKOFF_MAX_S = 30.0
 POISON_REASON = "internal_error"
+NO_SHOW_REASON = "no_show"
 
 
 @dataclass(frozen=True, slots=True)
@@ -613,8 +617,9 @@ class RoomOwner:
             return
         try:
             before = {s.user_id: s.presence for s in room.seats}
-            match_fsm.presence(room, self.rules_for(room), self._timing, seen, self._now())
-            self._log_presence_changes(room, before, seen)
+            if room.pair_deadline_ms is None or not await self._pair_gate(room, seen):
+                match_fsm.presence(room, self.rules_for(room), self._timing, seen, self._now())
+                self._log_presence_changes(room, before, seen)
             await self.settle(room)
             await self._release_silent_pointers(room, seen)
         except Exception as exc:
@@ -624,6 +629,50 @@ class RoomOwner:
             await self._tick_failed(room)
         else:
             self._tick_failures.pop(room.code, None)
+
+    async def _pair_gate(self, room: Room, seen: dict[UUID, int]) -> bool:
+        """Льгота найденной пары: ``True`` — ещё ждём первого сигнала (присутствие не считаем).
+
+        Первый сигнал игрока - любой его ``tick`` (очереди или комнаты) либо ``realtime-token``:
+        в ``seen`` появляется запись. Оба подали - ворота открываются, отсчёт идёт. За
+        ``pair_deadline_ms`` кто-то промолчал - комната закрывается ``no_show``: без технического
+        поражения и записи матча, рейтинг не меняется, подключившийся возвращается в поиск.
+        """
+        deadline = room.pair_deadline_ms
+        if deadline is None:
+            return False
+        now = self._now()
+        absent = {s.user_id for s in room.seats if s.presence is not Presence.LEFT} - set(seen)
+        if not absent:
+            match_fsm.open_pair_gate(room, self.rules_for(room), now)
+            return False
+        if now >= deadline:
+            await self._no_show(room, absent)
+        return True
+
+    async def _no_show(self, room: Room, absent: set[UUID]) -> None:
+        """«Не явился»: комната закрыта без штрафа, пришедший игрок - обратно в очередь."""
+        survivors = [
+            s.user_id
+            for s in room.seats
+            if s.presence is not Presence.LEFT and s.user_id not in absent
+        ]
+        room.pair_deadline_ms = None
+        self._requeued.add(room.code)
+        NO_SHOWS.inc()
+        log.info(
+            "match.ranked_no_show",
+            room=room.code,
+            absent=sorted(str(u) for u in absent),
+            survivors=[str(u) for u in survivors],
+        )
+        room.close(NO_SHOW_REASON, self._now())
+        if self._ranked is not None:
+            try:
+                await self._ranked.aborted(room, survivors)
+            except Exception:
+                # Записи очереди истекут сами; комната уже закрыта - не ломаем тик.
+                log.exception("match.ranked_requeue_failed", room=room.code)
 
     def _log_presence_changes(
         self, room: Room, before: dict[UUID, Presence], seen: dict[UUID, int]

@@ -43,7 +43,7 @@ from match_service.domain.errors import (
     MatchNotFoundError,
     MatchUnavailableError,
 )
-from match_service.domain.model import Phase
+from match_service.domain.model import Phase, Presence
 from match_service.domain.queue import MATCHED, RESERVED, SEARCHING
 
 log = structlog.get_logger(__name__)
@@ -185,10 +185,14 @@ class QueueService:
         return None
 
     async def _room_alive(self, record: QueueRecord) -> bool:
+        """Комната пары открыта и игрок ещё в ней (вышедший/сдавшийся поиск не блокирует)."""
         if record.room_code is None:
             return False
         room = await self._store.load(record.room_code)
-        return room is not None and not room.is_closed
+        if room is None or room.is_closed:
+            return False
+        seat = room.seat_of(record.user_id)
+        return seat is not None and seat.presence is not Presence.LEFT
 
     async def _active_room(self, actor: Actor) -> ActiveRoom | None:
         """Активная комната игрока (правило D10, одно с ``claim_room``)."""
@@ -234,6 +238,11 @@ class QueueService:
                 )
             raise MatchNotFoundError("вы не в очереди", code=errors.NOT_IN_QUEUE)
         if record.state == MATCHED and record.room_code is not None:
+            if not await self._room_alive(record):
+                # Найденная пара читается после старта матча (``found_ttl``), но не после
+                # закрытия комнаты: тогда поиск действительно окончен.
+                await self._queue.remove(actor.user_id)
+                raise MatchNotFoundError("вы не в очереди", code=errors.NOT_IN_QUEUE)
             await self._presence.touch(record.room_code, actor.user_id, self._now_ms())
         return await self._ticket(record)
 

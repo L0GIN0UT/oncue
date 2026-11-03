@@ -299,7 +299,9 @@ class SqlMatchRecords(_Events):
                     clue_type=str(meta.get("clue_type", "")),
                     answer_format=str(meta.get("answer_format", "")),
                     finished_at=r["finished_at"],
-                    finish=r["finish"],
+                    # ``finish`` есть и в match_players, и в matches: по имени строка отдаёт
+                    # колонку игрока (``tech_loss``/``left``) и ломает ответ - берём по таблице.
+                    finish=r[matches.c.finish],
                     players=r["players_count"],
                     place=r["place"],
                     score=r["score"],

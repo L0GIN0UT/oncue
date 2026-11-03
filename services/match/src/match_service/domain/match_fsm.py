@@ -217,6 +217,30 @@ def begin(room: Room, match: MatchState, rules: MatchRules, now_ms: int) -> None
     )
 
 
+def open_pair_gate(room: Room, rules: MatchRules | None, now_ms: int) -> None:
+    """Оба игрока найденной пары на связи: отсчёт идёт (если он уже простоял — заново).
+
+    Пока ворота стояли, отсчёт на нуле ждал соперника; игроки видят полный ``countdown_s``,
+    а не мгновенный старт.
+    """
+    room.pair_deadline_ms = None
+    match = room.match
+    if (
+        rules is not None
+        and match is not None
+        and match.started_at_ms is None
+        and room.phase is Phase.COUNTDOWN
+        and _expired(room, now_ms)
+    ):
+        room.set_phase(
+            Phase.COUNTDOWN,
+            now_ms + rules.countdown_ms,
+            round_index=None,
+            level=None,
+            rounds_total=match.rounds_total,
+        )
+
+
 # ----------------------------------------------------------------------------- ходы
 def require_turn(
     room: Room,
@@ -497,6 +521,8 @@ def _step_countdown(
     del timing
     if room.match is None or not _expired(room, now_ms):
         return None
+    if room.pair_deadline_ms is not None:
+        return None  # найденная пара: ждём первого сигнала обоих (иначе no_show у владельца)
     room.match.started_at_ms = now_ms
     return _open_round(room, rules, now_ms)
 

@@ -36,6 +36,9 @@ async def _pair(svc: MatchApp, ra: int = 1000, rb: int = 1000) -> tuple[Player, 
     svc.online.update((a.user_id, b.user_id))
     code = str(ticket["room_code"])
     await svc.phase(a, code, "countdown")  # комнату подхватил владелец и принял start
+    # Второй игрок тоже на связи: отсчёт ждёт первого сигнала обоих (pair_grace_s).
+    assert (await svc.queue_state(b, _matched))["room_code"] == code
+    await svc.sync(code)  # владелец увидел оба сигнала и открыл ворота до сдвига часов теста
     return a, b, code
 
 
@@ -246,6 +249,14 @@ async def _outbox(svc: MatchApp, event_type: str) -> list[Any]:
             await asyncio.sleep(0.05)
 
 
+async def _my_matches(svc: MatchApp, player: Player) -> list[dict[str, Any]]:
+    response = await svc.client.get("/v1/me/matches", headers=player.headers)
+    assert response.status_code == 200, response.text
+    items: list[dict[str, Any]] = response.json()["items"]
+    assert items
+    return items
+
+
 async def test_ranked_events_carry_queue_format_and_leave_is_a_loss(svc: MatchApp) -> None:
     a, b, code = await _pair(svc)
     await _start(svc, a, code)
@@ -261,6 +272,11 @@ async def test_ranked_events_carry_queue_format_and_leave_is_a_loss(svc: MatchAp
     outcome = {p["user_id"]: (p["finish"], p["outcome"]) for p in finished.payload["players"]}
     assert outcome[str(b.user_id)][0] == "left" and outcome[str(b.user_id)][1] == "loss"
     assert outcome[str(a.user_id)][1] == "win"
+    # Пункт 62: «Мои матчи» не падают, когда у игрока исход left (колонка finish есть в обеих
+    # таблицах - раньше матч-уровень подменялся игровым и ответ не проходил валидацию).
+    mine = await _my_matches(svc, b)
+    assert mine[0]["my_finish"] == "left"
+    assert mine[0]["finish"] not in ("left", "tech_loss")
 
 
 async def test_ranked_forfeit_is_a_loss_and_rematch_is_forbidden(svc: MatchApp) -> None:
@@ -291,6 +307,93 @@ async def test_ranked_disconnect_past_grace_is_tech_loss(svc: MatchApp) -> None:
     standings = {p["user_id"]: p for p in finished.payload["players"]}
     assert standings[str(b.user_id)]["finish"] == "tech_loss"
     assert standings[str(a.user_id)]["finish"] == "tech_win"
+    mine = await _my_matches(svc, b)  # пункт 62: tech_loss игрока не должен ломать историю
+    assert mine[0]["my_finish"] == "tech_loss"
+    assert mine[0]["finish"] == "tech_win"
+    assert (await _my_matches(svc, a))[0]["my_finish"] == "tech_win"
+
+
+# ----------------------------------------------------------------------------- стык с комнатой
+async def test_found_pair_stays_readable_after_match_start(svc: MatchApp) -> None:
+    """Пункт 60: тик после старта матча - ``matched`` с кодом комнаты, а не 404 «убрали»."""
+    a, b, code = await _pair(svc)
+    await _start(svc, a, code)
+    await _outbox(svc, "match.MatchStarted")  # запись очереди после этого уже не «поиск»
+    for player in (a, b):
+        ticket = (await svc.queue_tick(player)).json()
+        assert ticket["state"] == "matched" and ticket["room_code"] == code
+    # Повторный вход (клиент не понял 404 и нажал «искать») отдаёт ту же комнату, не 409.
+    again = await svc.enter(b)
+    assert again.status_code == 200 and again.json()["room_code"] == code
+
+
+async def test_found_pair_is_not_readable_after_room_closes(svc: MatchApp) -> None:
+    a, b, code = await _pair(svc)
+    await _start(svc, a, code)
+    await _outbox(svc, "match.MatchStarted")
+    await svc.ok(b, code, "match/forfeit")
+    await svc.phase(a, code, "summary")
+    await svc.ok(a, code, "leave")
+    await svc.ok(b, code, "leave")
+    assert_problem(await svc.queue_tick(b), 404, "match.not_in_queue")
+
+
+async def test_player_who_left_running_match_can_search_again(svc: MatchApp) -> None:
+    """Вышедший из идущего матча не застревает на ``matched`` в старой комнате (ревью)."""
+    a, b, code = await _pair(svc)
+    await _start(svc, a, code)
+    await _outbox(svc, "match.MatchStarted")
+    await svc.ok(b, code, "leave")
+    assert_problem(await svc.queue_tick(b), 404, "match.not_in_queue")
+    fresh = await svc.enter(b)
+    assert fresh.status_code == 200
+    assert fresh.json()["state"] == "searching" and fresh.json()["room_code"] is None
+
+
+async def test_slow_second_player_within_grace_is_not_a_no_show(svc: MatchApp) -> None:
+    """Второй подал первый сигнал на 20-й секунде: отсчёт ждал его и матч состоялся."""
+    await svc.ladder("music")
+    a, b = svc.user(), svc.user()
+    await svc.enter(a)
+    await svc.enter(b)
+    ticket = await svc.queue_state(a, _matched)
+    code = str(ticket["room_code"])
+    svc.online.update((a.user_id, b.user_id))
+    svc.clock.advance(seconds=20)
+    await svc.queue_tick(a)
+    assert (await svc.state(a, code))["room"]["phase"] == "countdown"  # b молчит: отсчёт ждёт
+    assert (await svc.queue_tick(b)).json()["room_code"] == code
+    svc.clock.advance(seconds=3)
+    await svc.phase(a, code, "countdown")  # ворота открыты, отсчёт пошёл заново
+    svc.clock.advance(seconds=3)
+    await svc.phase(a, code, "level_open")
+
+
+async def test_no_show_returns_present_player_to_queue_without_penalty(svc: MatchApp) -> None:
+    """Пункт 60Б: соперник не подал сигнал за ``pair_grace_s`` - комната ``no_show``, без штрафа."""
+    await svc.ladder("music")
+    a, b = svc.user(), svc.user()
+    await svc.rate(a, "music", 1000, 1)
+    await svc.rate(b, "music", 1000, 1)
+    await svc.enter(a)
+    await svc.enter(b)
+    waiting = await svc.queue_state(a, _matched)  # b не подаёт сигналов
+    code = str(waiting["room_code"])
+    svc.online.add(a.user_id)
+    svc.clock.advance(seconds=31)
+    back = await svc.queue_state(a, lambda t: t["state"] == "searching")
+    assert back["entered_at"] == waiting["entered_at"] and back["room_code"] is None
+    assert (await svc.state(a, code))["room"]["phase"] == "closed"
+    closed = [dict(m)["delta"] for m in svc.realtime.room(code) if dict(m)["kind"] == "closed"]
+    assert [d["reason"] for d in closed] == ["no_show"]  # клиент по причине вернётся в поиск
+    # Ни матча, ни итога, ни техпоражения: рейтинг (его меняет MatchFinished) не тронут.
+    types = {e.event_type for e in await svc.outbox()}
+    assert not types & {"match.MatchStarted", "match.MatchFinished"}
+    assert_problem(await svc.queue_tick(b), 404, "match.not_in_queue")
+    # Вернувшийся игрок находит нового соперника с прежним временем ожидания.
+    c = svc.user()
+    await svc.enter(c)
+    assert (await svc.queue_state(a, _matched))["room_code"] != code
 
 
 async def test_admin_abort_is_aborted_outcome(svc: MatchApp) -> None:

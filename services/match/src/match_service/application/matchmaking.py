@@ -78,7 +78,9 @@ class RankedTemplates:
         try:
             parsed: ModeTemplate | None = self._factory.template(key, version, body)
         except (ConfigError, AppError) as exc:
-            log.warning("match.ranked_template_invalid", mode_key=key, error=type(exc).__name__)
+            # Перебор идёт по всем режимам домена, большинство не рейтинговые: warning на каждый
+            # вход в очередь - шум. Результат кэшируется, поэтому лог один раз на (режим, версия).
+            log.debug("match.ranked_template_invalid", mode_key=key, error=type(exc).__name__)
             parsed = None
         self._parsed[cached] = parsed
         return parsed
@@ -118,6 +120,7 @@ class MatcherSettings:
     batch_max: int
     pending_room_ms: int
     reserved_stale_ms: int = 10_000
+    pair_grace_ms: int = 0
 
 
 @dataclass(slots=True)
@@ -320,6 +323,9 @@ class Matchmaker:
             )
             room.join(second.user_id, names.get(second.user_id, ""), now)
             room.set_ready(second.user_id, ready=True, now_ms=now)
+            if self._settings.pair_grace_ms > 0:
+                # Отсчёт ждёт первого сигнала обоих; не подал за льготу - no_show (владелец).
+                room.pair_deadline_ms = now + self._settings.pair_grace_ms
             room.pull_changes()
             if await self._store.create(room):
                 attempt.created = True
@@ -371,9 +377,12 @@ class QueueHooks:
         self._policy = policy or StartFailurePolicy()
 
     async def started(self, room: Room) -> None:
-        """Матч идёт: записи очереди обоих игроков больше не нужны."""
+        """Матч идёт: записи очереди обоих остаются читаемыми ещё ``found_ttl``.
+
+        Тик клиента, пришедший уже после старта, отвечает ``matched`` с кодом комнаты, а не 404.
+        """
         for seat in room.seats:
-            await self._queue.release(seat.user_id, room.code)
+            await self._queue.retain(seat.user_id, room.code)
 
     async def aborted(self, room: Room, survivors: Sequence[UUID]) -> None:
         """Срыв отсчёта: оставшиеся — в поиск с прежним ``entered_at``, ушедшие — прочь.

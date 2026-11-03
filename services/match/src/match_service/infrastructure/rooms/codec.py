@@ -344,6 +344,7 @@ def encode(room: Room) -> Json:
         "rematch_votes": sorted(_ids(room.rematch_votes)),
         "rematch_code": room.rematch_code,
         "start_error": list(room.start_error) if room.start_error is not None else None,
+        "pair_deadline_ms": room.pair_deadline_ms,
         "forgotten": sorted(_ids(room.forgotten)),
         "close_reason": room.close_reason,
         "cursor": room.cursor,
@@ -657,6 +658,9 @@ def _decode(d: Json) -> Room:
         rematch_code=d.get("rematch_code"),
         start_error=(
             (str(d["start_error"][0]), int(d["start_error"][1])) if d.get("start_error") else None
+        ),
+        pair_deadline_ms=(
+            int(d["pair_deadline_ms"]) if d.get("pair_deadline_ms") is not None else None
         ),
         forgotten={_uuid(u) for u in d.get("forgotten", [])},
         close_reason=d.get("close_reason"),
