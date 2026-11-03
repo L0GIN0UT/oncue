@@ -20,6 +20,7 @@ import { roundOutcome } from "./levels";
 import { Metric } from "./Metric";
 import { RevealSave } from "./RevealSave";
 import { useFinalClue } from "./use-final-clue";
+import { RevealAudio } from "./RevealAudio";
 
 type Props = {
   sessionId: string;
@@ -85,7 +86,10 @@ export function RevealDialog({
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== " " && e.key !== "Enter") return;
       if (e.repeat || e.altKey || e.ctrlKey || e.metaKey) return;
-      if (e.target instanceof HTMLElement && e.target.closest("button, a, input, [role=menu]"))
+      if (
+        e.target instanceof HTMLElement &&
+        e.target.closest("button, a, input, [role=menu], [role=slider]")
+      )
         return;
       e.preventDefault();
       onNext();
@@ -176,6 +180,7 @@ function AnswerBody({ sessionId, round, stats, domain }: BodyProps) {
   return (
     <>
       <FinalArt sessionId={sessionId} round={round} domain={domain} title={reveal.title} />
+      <RevealAudio sessionId={sessionId} round={round} />
       <div className="flex flex-col items-center gap-1 text-center">
         <span className="text-[13px] text-ink-muted">{t("game.reveal.was")}</span>
         <h2
