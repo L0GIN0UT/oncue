@@ -6,6 +6,7 @@ import { server, setupMockBackend, signInAsGuest, signInAsUser, world } from "@/
 import { renderWithProviders } from "@/test/render";
 import { ITEMS } from "../../../e2e/mocks/world";
 import { SaveButton } from "./SaveButton";
+import { ShelfView } from "./ShelfView";
 
 setupMockBackend();
 
@@ -82,5 +83,25 @@ describe("SaveButton и ShelfPicker", () => {
     await user.keyboard("{Escape}");
     expect(screen.queryByTestId("shelf-picker")).not.toBeInTheDocument();
     expect(button).toHaveFocus();
+  });
+
+  it.each([
+    ["трек", song],
+    ["фильм", film],
+  ])("«Любимое»: %s попадает на полку system:favorite и виден на её странице", async (_, item) => {
+    const user = userEvent.setup();
+    const subject = signInAsUser();
+    const view = renderWithProviders(
+      <SaveButton mediaItemId={item.id} source="reveal" domain={item.domain} />,
+    );
+    await user.click(await screen.findByRole("button", { name: "Сохранить" }));
+    await user.click(await screen.findByTestId("shelf-option-system:favorite"));
+    await waitFor(() =>
+      expect(world.ugc.itemShelves(subject, item.id)).toContain("system:favorite"),
+    );
+    view.unmount();
+
+    renderWithProviders(<ShelfView shelfRef="system:favorite" />);
+    expect(await screen.findByTestId(`library-item-${item.id}`)).toBeInTheDocument();
   });
 });

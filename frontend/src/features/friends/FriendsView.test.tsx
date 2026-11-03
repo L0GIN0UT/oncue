@@ -59,6 +59,15 @@ describe("FriendsView: заявки", () => {
     expect(world.social.friends.some((f) => f.nickname === "Дмитрий")).toBe(true);
   });
 
+  it("ник в заявке — ссылка на профиль игрока", async () => {
+    await open("requests");
+    const row = await screen.findByTestId("request-in-Дмитрий");
+    expect(within(row).getByTestId("request-profile-link")).toHaveAttribute(
+      "href",
+      `/players/${world.social.incoming[0]!.user_id}`,
+    );
+  });
+
   it("отклонить входящую и отозвать исходящую", async () => {
     world.social.outgoing = [
       { id: "out-1", user_id: "u-x", nickname: "Игорь", created_at: "2026-10-20T10:00:00Z" },
