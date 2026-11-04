@@ -2643,6 +2643,41 @@ export interface components {
             title_key: string;
         };
         /**
+         * ResultArtwork
+         * @description Картинка ответа раунда (форма как ``Reveal.artwork`` в game, ADR 0073).
+         */
+        ResultArtwork: {
+            /**
+             * Expires At
+             * Format: date-time
+             */
+            expires_at: string;
+            /** Mime */
+            mime: string;
+            /** Url */
+            url: string;
+        };
+        /**
+         * ResultFinalClue
+         * @description Полный фрагмент ответа (форма как ``Reveal.final_clue`` в game): аудио или кадр.
+         */
+        ResultFinalClue: {
+            /**
+             * Expires At
+             * Format: date-time
+             */
+            expires_at: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "audio" | "image" | "text";
+            /** Mime */
+            mime: string;
+            /** Url */
+            url: string;
+        };
+        /**
          * ResultRecord
          * @description Рекорд в итоге (только пользователи, режимы с рекордами).
          */
@@ -2659,11 +2694,15 @@ export interface components {
          * @description Раунд итога (из ``game /v1/sessions/{id}/result``).
          */
         ResultRoundCard: {
+            /** @description Обложка/постер ответа; подписанная ссылка на 60 с. null у void-раунда, без картинки и при сбое выдачи (клиент рисует заглушку). Перевыдача после истечения — `POST /api/game/v1/sessions/{id}/rounds/{i}/artwork` */
+            artwork?: components["schemas"]["ResultArtwork"] | null;
             /**
              * Exact Pct
              * @description Доля угадавших (только дейлик)
              */
             exact_pct?: number | null;
+            /** @description Полный фрагмент ответа (30 с аудио, кадр для blackout и кадровых режимов); ссылка на 60 с. null у void-раунда. Перевыдача — `POST /api/game/v1/sessions/{id}/rounds/{i}/final-clue` */
+            final_clue?: components["schemas"]["ResultFinalClue"] | null;
             /** Index */
             index: number;
             /** Level */
