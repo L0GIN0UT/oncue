@@ -295,6 +295,53 @@ async def test_reprocessing_after_worker_crash_does_not_duplicate_sources(with_f
     assert (done.status, done.done) == (PackageStatus.DONE, 2)
 
 
+def _ticking_clock(media: Any) -> None:
+    """Часы идут на 1 мс при каждом обращении: как системные при обработке файлов по очереди."""
+    state = {"at": media.clock.now()}
+
+    def now() -> Any:
+        state["at"] += timedelta(milliseconds=1)
+        return state["at"]
+
+    media.clock.now = now
+
+
+def _frame_package(seed: int) -> bytes:
+    """Пакет с шестью кадрами фильма; порядок в манифесте = порядок позиций 1..6."""
+    names = [f"f/{n}.jpg" for n in range(1, 7)]
+    files = [{"role": "frame", "path": p, "position": n} for n, p in enumerate(names, start=1)]
+    return zip_of(
+        {p: JPEG + bytes([seed, n]) for n, p in enumerate(names, start=1)},
+        doc(film(files, origin="tmdb")),
+    )
+
+
+async def test_last_frame_of_package_feeds_frame_progressive(with_film: Any) -> None:
+    """Файлы пакета идут по порядку манифеста, побеждает самый свежий кадр, то есть последний.
+
+    Замена кадров (`gv dev seed-real --replace-frames`) опирается на это: «лучший» кадр
+    кладётся в манифест последним.
+    """
+    media = with_film
+    _ticking_clock(media)
+    await run(media, _frame_package(1))
+    (first,) = await media.list_sets.execute(ITEM, "frame_progressive")
+    (source_id,) = media.db.asset_sets[first.asset_set_id].source_media_ids
+    assert media.db.sources[source_id].position == 6
+
+    # Повторная загрузка новых файлов того же тайтла: тот же набор, новые поколения,
+    # источник — снова последний кадр, но уже новый.
+    await run(media, _frame_package(2))
+    (second,) = await media.list_sets.execute(ITEM, "frame_progressive")
+    assert second.asset_set_id == first.asset_set_id
+    # каждый файл пакета перепланирует набор: поколение растёт на каждый кадр
+    assert second.generation == first.generation + 6
+    (new_id,) = media.db.asset_sets[second.asset_set_id].source_media_ids
+    assert new_id != source_id
+    assert media.db.sources[new_id].position == 6
+    assert len(media.db.sources) == 12  # старые источники остаются
+
+
 async def test_terminal_package_is_not_processed_again(with_film: Any) -> None:
     media = with_film
     archive = zip_of({"a.jpg": JPEG}, doc(film([{"role": "frame", "path": "a.jpg"}])))

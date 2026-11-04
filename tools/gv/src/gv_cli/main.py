@@ -24,7 +24,7 @@ import secrets
 import subprocess
 import sys
 from pathlib import Path
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated
 
 import typer
 
@@ -32,6 +32,9 @@ from gv_cli import contracts, generate, hooks, scaffold, workspace
 from gv_cli.generate import service_secret_env
 from gv_cli.preflight import PreflightError, check_env, read_env_file
 from gv_cli.registry import NAME_RE, load_services, repo_root
+
+if TYPE_CHECKING:
+    from gv_cli.seed import SeedConfig
 
 app = typer.Typer(help="CLI разработчика Guessverse", no_args_is_help=True)
 dev = typer.Typer(help="Локальное окружение (docker compose)", no_args_is_help=True)
@@ -436,6 +439,44 @@ def dev_seed(
         raise typer.Exit(1) from exc
 
 
+def _seed_real_config(date_: str | None, import_dir: Path | None) -> SeedConfig:
+    """``SeedConfig`` стенда из окружения (учётка админа и сервисный секрет обязательны)."""
+    from datetime import date as date_type
+
+    from gv_cli import seed as seed_module
+
+    env = os.environ
+    secret_env = service_secret_env("admin")
+    missing = [
+        n
+        for n in ("GV_BOOTSTRAP_ADMIN__LOGIN", "GV_BOOTSTRAP_ADMIN__PASSWORD", secret_env)
+        if not env.get(n)
+    ]
+    if missing:
+        raise typer.BadParameter(f"нет переменных окружения: {', '.join(missing)}")
+
+    def url(name: str, default: str) -> str:
+        return env.get(f"GV_SEED__{name}_URL", default)
+
+    return seed_module.SeedConfig(
+        identity_url=url("IDENTITY", "http://127.0.0.1:8100"),
+        catalog_url=url("CATALOG", "http://127.0.0.1:8101"),
+        media_url=url("MEDIA", "http://127.0.0.1:8102"),
+        game_url=url("GAME", "http://127.0.0.1:8103"),
+        collections_url=url("COLLECTIONS", "http://127.0.0.1:8106"),
+        progression_url=url("PROGRESSION", "http://127.0.0.1:8109"),
+        social_url=url("SOCIAL", "http://127.0.0.1:8111"),
+        admin_login=env["GV_BOOTSTRAP_ADMIN__LOGIN"],
+        admin_password=env["GV_BOOTSTRAP_ADMIN__PASSWORD"],
+        service_secret=env[secret_env],
+        repo_root=repo_root(),
+        day=date_type.fromisoformat(date_) if date_ else None,
+        catalog_dir=import_dir,
+        import_timeout_s=3000.0,
+        assets_timeout_s=900.0,
+    )
+
+
 @dev.command("seed-real")
 def dev_seed_real(
     *,
@@ -493,47 +534,90 @@ def dev_seed_real(
             "события, social и featured-сборники; режимы без материала пропускаются",
         ),
     ] = False,
+    frames_dir: Annotated[
+        Path | None,
+        typer.Option(
+            "--frames-dir",
+            help="Исправленные кадры: каталог с catalog-films.fixed.jsonl и папками тайтлов "
+            "(только вместе с --replace-frames)",
+        ),
+    ] = None,
+    replace_frames: Annotated[
+        bool,
+        typer.Option(
+            "--replace-frames",
+            help="Заменить кадры уже загруженных тайтлов из --frames-dir (остальной засев не "
+            "выполняется). Кадры грузятся в порядке списка frames: лучший - последним",
+        ),
+    ] = False,
+    dry_run: Annotated[
+        bool,
+        typer.Option("--dry-run", help="Замена кадров: только проверить файлы, стенд не трогать"),
+    ] = False,
+    limit: Annotated[
+        int | None,
+        typer.Option(
+            "--limit", min=1, help="Замена кадров: ещё не больше N не готовых тайтлов за запуск"
+        ),
+    ] = None,
+    only: Annotated[
+        list[str] | None,
+        typer.Option("--only", help="Замена кадров: только этот ключ (можно повторять)"),
+    ] = None,
+    run_id: Annotated[
+        str | None,
+        typer.Option(
+            "--run-id", help="Замена кадров: идентификатор запуска; тот же id возобновляет запуск"
+        ),
+    ] = None,
+    log_dir: Annotated[
+        Path | None,
+        typer.Option(
+            "--log-dir",
+            help="Замена кадров: куда писать журнал, снимки наборов до замены и состояние "
+            "(по умолчанию <real-dir>/replace-frames-logs)",
+        ),
+    ] = None,
 ) -> None:
     """Дополнительный засев реальными открытыми медиа (только local; после ``gv dev seed``).
 
     С ``--without-synthetic`` команда самодостаточна: синтетика не нужна.
+    С ``--frames-dir ... --replace-frames`` вместо засева заменяются кадры тайтлов.
     """
-    from datetime import date as date_type
-
     from gv_cli import seed as seed_module
-    from gv_cli import seed_real
+    from gv_cli import seed_frames, seed_real
 
-    env = os.environ
-    secret_env = service_secret_env("admin")
-    missing = [
-        n
-        for n in ("GV_BOOTSTRAP_ADMIN__LOGIN", "GV_BOOTSTRAP_ADMIN__PASSWORD", secret_env)
-        if not env.get(n)
-    ]
-    if missing:
-        raise typer.BadParameter(f"нет переменных окружения: {', '.join(missing)}")
+    if replace_frames != (frames_dir is not None):
+        raise typer.BadParameter("--frames-dir и --replace-frames задаются только вместе")
+    replace_options = (dry_run, limit, only, run_id, log_dir)
+    if not replace_frames and any(v not in (None, False) for v in replace_options):
+        raise typer.BadParameter(
+            "--dry-run, --limit, --only, --run-id и --log-dir относятся к --replace-frames"
+        )
+    if replace_frames and (without_synthetic or import_dir is not None or tracks_limit is not None):
+        raise typer.BadParameter(
+            "--without-synthetic, --import-dir и --tracks-limit не относятся к --replace-frames"
+        )
+    if frames_dir is not None:
+        try:
+            seed_frames.run_replace_frames(
+                None if dry_run else _seed_real_config(date_, import_dir),
+                frames_dir=frames_dir,
+                log_dir=log_dir or real_dir / "replace-frames-logs",
+                run_id=run_id,
+                only=only or (),
+                limit=limit,
+                dry_run=dry_run,
+                package_units=package_units,
+                stall_timeout_s=stall_timeout_min * 60.0,
+                echo=lambda msg: typer.secho(msg, fg=typer.colors.CYAN),
+            )
+        except seed_module.SeedError as exc:
+            typer.secho(str(exc), fg="red")
+            raise typer.Exit(1) from exc
+        return
 
-    def url(name: str, default: str) -> str:
-        return env.get(f"GV_SEED__{name}_URL", default)
-
-    root = repo_root()
-    config = seed_module.SeedConfig(
-        identity_url=url("IDENTITY", "http://127.0.0.1:8100"),
-        catalog_url=url("CATALOG", "http://127.0.0.1:8101"),
-        media_url=url("MEDIA", "http://127.0.0.1:8102"),
-        game_url=url("GAME", "http://127.0.0.1:8103"),
-        collections_url=url("COLLECTIONS", "http://127.0.0.1:8106"),
-        progression_url=url("PROGRESSION", "http://127.0.0.1:8109"),
-        social_url=url("SOCIAL", "http://127.0.0.1:8111"),
-        admin_login=env["GV_BOOTSTRAP_ADMIN__LOGIN"],
-        admin_password=env["GV_BOOTSTRAP_ADMIN__PASSWORD"],
-        service_secret=env[secret_env],
-        repo_root=root,
-        day=date_type.fromisoformat(date_) if date_ else None,
-        catalog_dir=import_dir,
-        import_timeout_s=3000.0,
-        assets_timeout_s=900.0,
-    )
+    config = _seed_real_config(date_, import_dir)
     try:
         seed_real.run_seed_real(
             config,

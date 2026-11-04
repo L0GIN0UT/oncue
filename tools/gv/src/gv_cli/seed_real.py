@@ -972,7 +972,11 @@ class RealSeeder(Seeder):
     Attributes:
         broken: Битые единицы запуска: ключ → причина. Они не ждутся, не попадают в сборники
             и перечисляются в сводке; повторный запуск пробует их снова.
+        _package_reason: Причина (``reason``) пакетов в аудите media-pipeline; наследники
+            (замена кадров) задают свою.
     """
+
+    _package_reason: str = REASON
 
     def __init__(
         self,
@@ -1153,6 +1157,10 @@ class RealSeeder(Seeder):
             package_id = self._post_package(archive)
         return self._wait_package(package_id)
 
+    def _package_key(self, digest: str) -> str:
+        """``Idempotency-Key`` пакета: запуск и хэш архива (наследники добавляют свои части)."""
+        return f"seed-package-{self._run_id}-{digest[:24]}"
+
     def _post_package(self, archive: Path) -> str:
         """``POST /admin/v1/packages`` потоком; ключ идемпотентности: запуск и хэш архива."""
         hasher = hashlib.sha256()
@@ -1169,9 +1177,9 @@ class RealSeeder(Seeder):
 
         resp = self._media.post(
             "/admin/v1/packages",
-            params={"reason": REASON},
+            params={"reason": self._package_reason},
             headers={
-                "Idempotency-Key": f"seed-package-{self._run_id}-{digest[:24]}",
+                "Idempotency-Key": self._package_key(digest),
                 "Content-Type": "application/zip",
                 "Content-Length": str(size),
             },
