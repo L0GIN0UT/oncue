@@ -659,6 +659,33 @@ class PlayService:
             raise AssetUnavailableError("ассет ревила недоступен") from exc
         return clue_json(view)
 
+    async def artwork(self, player: Player, session_id: UUID, index: int) -> Json:
+        """Свежая ссылка картинки ответа завершённого не-``void`` раунда своей сессии (ADR 0073).
+
+        Аналог :meth:`final_clue` для картинки: итоги показывают её после того, как ссылка
+        (60 с) истекла. Античит тот же — только после конца раунда.
+
+        Raises:
+            SessionNotFoundError: сессии нет или она чужая.
+            RoundNotFinishedError: раунд идёт или ещё не выдан (409).
+            AssetUnavailableError: раунд ``void``, картинки нет или набор выключен (410).
+            GameRateLimitedError: лимит ``GV_GAME_LIMITS__FINAL_CLUE_PER_MIN`` (своя корзина).
+        """
+        await self._limiter.hit(
+            "artwork", str(player.actor_id), limit=self._limits.final_clue_per_min, window_s=60
+        )
+        async with self._uow() as uow:
+            session = await self._load(uow, player, session_id)
+        if not 0 <= index < len(session.rounds) or not session.rounds[index].finished:
+            raise RoundNotFinishedError("картинка ответа доступна только после раунда")
+        r = session.rounds[index]
+        if r.is_void or r.artwork_asset is None:
+            raise AssetUnavailableError("раунд не засчитан или картинки нет")
+        try:
+            return await self._presenter.issue_artwork(session, r)
+        except GoneError as exc:
+            raise AssetUnavailableError("набор картинки недоступен") from exc
+
     async def _mark_started(self, player: Player, session_id: UUID, index: int) -> None:
         async with self._uow() as uow:
             session = await self._load(uow, player, session_id, lock=True)

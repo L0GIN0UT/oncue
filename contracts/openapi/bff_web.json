@@ -5534,6 +5534,66 @@
         "title": "RecordCard",
         "type": "object"
       },
+      "ResultArtwork": {
+        "description": "Картинка ответа раунда (форма как ``Reveal.artwork`` в game, ADR 0073).",
+        "properties": {
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "mime": {
+            "title": "Mime",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url",
+          "expires_at",
+          "mime"
+        ],
+        "title": "ResultArtwork",
+        "type": "object"
+      },
+      "ResultFinalClue": {
+        "description": "Полный фрагмент ответа (форма как ``Reveal.final_clue`` в game): аудио или кадр.",
+        "properties": {
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "audio",
+              "image",
+              "text"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "mime": {
+            "title": "Mime",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "url",
+          "expires_at",
+          "mime"
+        ],
+        "title": "ResultFinalClue",
+        "type": "object"
+      },
       "ResultRecord": {
         "description": "Рекорд в итоге (только пользователи, режимы с рекордами).",
         "properties": {
@@ -5569,6 +5629,17 @@
       "ResultRoundCard": {
         "description": "Раунд итога (из ``game /v1/sessions/{id}/result``).",
         "properties": {
+          "artwork": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ResultArtwork"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Обложка/постер ответа; подписанная ссылка на 60 с. null у void-раунда, без картинки и при сбое выдачи (клиент рисует заглушку). Перевыдача после истечения — `POST /api/game/v1/sessions/{id}/rounds/{i}/artwork`"
+          },
           "exact_pct": {
             "anyOf": [
               {
@@ -5582,6 +5653,17 @@
             ],
             "description": "Доля угадавших (только дейлик)",
             "title": "Exact Pct"
+          },
+          "final_clue": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ResultFinalClue"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Полный фрагмент ответа (30 с аудио, кадр для blackout и кадровых режимов); ссылка на 60 с. null у void-раунда. Перевыдача — `POST /api/game/v1/sessions/{id}/rounds/{i}/final-clue`"
           },
           "index": {
             "title": "Index",

@@ -295,6 +295,8 @@ def result_summary(session_id: UUID, result: SessionResult) -> ResultSummary:
                 points=r.points,
                 media_item_id=r.reveal.media_item_id if r.reveal else None,
                 exact_pct=pct.get(r.index),
+                artwork=r.reveal.artwork if r.reveal else None,
+                final_clue=r.reveal.final_clue if r.reveal else None,
             )
             for r in result.rounds
         ],

@@ -140,6 +140,7 @@ async def test_schema_endpoint_lists_mode_config(
     [
         ("GET", "/v1/modes/film.marathon.director/subjects?q=нолан"),
         ("POST", f"/v1/sessions/{SESSION}/rounds/0/final-clue"),
+        ("POST", f"/v1/sessions/{SESSION}/rounds/0/artwork"),
         ("GET", "/v1/me/records"),
     ],
 )
