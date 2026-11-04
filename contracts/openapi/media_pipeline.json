@@ -293,6 +293,74 @@
         "title": "Body_upload_source_admin_v1_sources_post",
         "type": "object"
       },
+      "CoverLinkItem": {
+        "description": "Ссылка на обложку единицы.",
+        "properties": {
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "media_item_id": {
+            "format": "uuid",
+            "title": "Media Item Id",
+            "type": "string"
+          },
+          "mime": {
+            "title": "Mime",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "media_item_id",
+          "url",
+          "expires_at",
+          "mime"
+        ],
+        "title": "CoverLinkItem",
+        "type": "object"
+      },
+      "CoverLinksRequest": {
+        "description": "Запрос ссылок на обложки единиц (предел размера пакета - в настройках сервиса).",
+        "properties": {
+          "media_item_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 200,
+            "minItems": 1,
+            "title": "Media Item Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "media_item_ids"
+        ],
+        "title": "CoverLinksRequest",
+        "type": "object"
+      },
+      "CoverLinksResponse": {
+        "description": "Ссылки только для единиц с готовой обложкой; остальные в ответ не попадают.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CoverLinkItem"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "CoverLinksResponse",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -3504,6 +3572,98 @@
           }
         },
         "summary": "Наборы ассетов единицы",
+        "tags": [
+          "internal"
+        ]
+      }
+    },
+    "/internal/v1/cover-links": {
+      "post": {
+        "description": "Каталожный набор `artwork`, уровень 1. Срок ссылки кратен окну `GV_MEDIA__COVER_LINK_WINDOW_S`: повторные запросы в окне дают тот же URL. Единицы без готовой обложки или заблокированные в ответ не попадают.",
+        "operationId": "create_cover_links_internal_v1_cover_links_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CoverLinksRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CoverLinksResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Зависимость временно недоступна"
+          }
+        },
+        "summary": "Выдать ссылки на обложки списка единиц (карточки каталога)",
         "tags": [
           "internal"
         ]

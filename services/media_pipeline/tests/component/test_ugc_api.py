@@ -40,7 +40,9 @@ async def ugc_client(media: Any) -> AsyncIterator[Client]:
     def routers(infra: Infrastructure, adapters: Any = None) -> list[Any]:
         return [
             build_public_router(infra),
-            build_internal_router(media.issue_link, media.list_sets, media.ugc),
+            build_internal_router(
+                media.issue_link, media.list_sets, media.ugc, media.issue_cover_links
+            ),
             build_admin_router(
                 upload=media.upload,
                 set_position=media.set_position,

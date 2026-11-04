@@ -22,7 +22,12 @@ from media_pipeline_service.domain.errors import (
     InvalidProfileError,
     LevelOutOfRangeError,
 )
-from media_pipeline_service.domain.links import LinkPolicy, asset_object_key, source_object_key
+from media_pipeline_service.domain.links import (
+    CoverLinkPolicy,
+    LinkPolicy,
+    asset_object_key,
+    source_object_key,
+)
 from media_pipeline_service.domain.media_items import ItemStatus, MediaItemState
 from media_pipeline_service.domain.profiles import AssetProfile, AssetProfileCatalog
 from media_pipeline_service.domain.sources import (
@@ -321,3 +326,25 @@ def test_link_policy_expiry_and_rate_key() -> None:
         LinkPolicy(ttl_s=0, max_per_window=1, window_s=1)
     with pytest.raises(ValueError, match="положительными"):
         LinkPolicy(ttl_s=60, max_per_window=0, window_s=1)
+
+
+def test_cover_link_policy_expires_are_stable_within_window_and_live_at_least_a_window() -> None:
+    from datetime import UTC, datetime
+
+    policy = CoverLinkPolicy(window_s=3600, batch_max=50)
+    start = datetime(2026, 11, 4, 12, 0, 0, tzinfo=UTC)
+    first = policy.expires_at(start)
+    last_in_window = policy.expires_at(datetime(2026, 11, 4, 12, 59, 59, tzinfo=UTC))
+    next_window = policy.expires_at(datetime(2026, 11, 4, 13, 0, 0, tzinfo=UTC))
+
+    assert first == last_in_window == datetime(2026, 11, 4, 14, 0, 0, tzinfo=UTC)
+    assert next_window == datetime(2026, 11, 4, 15, 0, 0, tzinfo=UTC)
+    # Срок жизни: не меньше окна и не больше двух окон.
+    assert 3600 <= (first - start).total_seconds() <= 7200
+    assert (last_in_window - datetime(2026, 11, 4, 12, 59, 59, tzinfo=UTC)).total_seconds() >= 3600
+
+
+@pytest.mark.parametrize(("window_s", "batch_max"), [(59, 10), (86_401, 10), (3600, 0)])
+def test_cover_link_policy_rejects_bad_settings(window_s: int, batch_max: int) -> None:
+    with pytest.raises(ValueError, match="должен"):
+        CoverLinkPolicy(window_s=window_s, batch_max=batch_max)

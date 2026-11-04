@@ -70,3 +70,33 @@ class LinkPolicy:
     def rate_key(subject: str, asset_set_id: UUID, level: int) -> str:
         """Ключ счётчика лимита. Субъект хэшируется: в Redis не должно быть идентификаторов."""
         return f"{LinkPolicy.subject_hash(subject)[:32]}:{asset_set_id.hex}:{level}"
+
+
+@dataclass(frozen=True, slots=True)
+class CoverLinkPolicy:
+    """Правила выдачи ссылок на обложки для карточек каталога (пакетно, окно часа).
+
+    Ссылка на обложку не секретна и нужна десяткам карточек сразу, поэтому живёт дольше
+    ответа раунда. ``expires`` округляется ВВЕРХ до границы окна с запасом в целое окно:
+    в пределах одного окна все выдачи дают одну и ту же ссылку (стабильный URL — работают
+    кэши браузера и bff), а срок жизни ссылки не короче ``window_s`` и не длиннее
+    ``2 * window_s``.
+
+    Attributes:
+        window_s: Длина окна (из ``GV_MEDIA__COVER_LINK_WINDOW_S``, 60..86400).
+        batch_max: Сколько единиц можно запросить за раз.
+    """
+
+    window_s: int
+    batch_max: int
+
+    def __post_init__(self) -> None:
+        if not 60 <= self.window_s <= 86_400:  # noqa: PLR2004 — границы здравого смысла
+            raise ValueError("window_s должен быть от 60 до 86400 секунд")
+        if self.batch_max < 1:
+            raise ValueError("batch_max должен быть положительным")
+
+    def expires_at(self, now: datetime) -> datetime:
+        """Граница окна, до которой действует ссылка, выданная в ``now``."""
+        bucket = int(now.timestamp()) // self.window_s
+        return datetime.fromtimestamp((bucket + 2) * self.window_s, tz=now.tzinfo)

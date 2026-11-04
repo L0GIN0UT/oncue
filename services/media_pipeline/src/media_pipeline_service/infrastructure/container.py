@@ -29,7 +29,11 @@ from media_pipeline_service.application.commands.generation import (
     GenerateAssetSet,
     RegenerateAssetSet,
 )
-from media_pipeline_service.application.commands.links import IssueAssetLink, PurgeLinkJournal
+from media_pipeline_service.application.commands.links import (
+    IssueAssetLink,
+    IssueCoverLinks,
+    PurgeLinkJournal,
+)
 from media_pipeline_service.application.commands.packages import (
     ProcessPackage,
     SubmitPackage,
@@ -82,7 +86,7 @@ from media_pipeline_service.application.queries.profiles import ListProfiles
 from media_pipeline_service.application.queries.sources import GetSourcePreview, ListSources
 from media_pipeline_service.application.queries.ugc import GetUgcImage, ListUgcQueue
 from media_pipeline_service.application.sources import SourceIngestor
-from media_pipeline_service.domain.links import LinkPolicy
+from media_pipeline_service.domain.links import CoverLinkPolicy, LinkPolicy
 from media_pipeline_service.domain.profiles import AssetProfileCatalog
 from media_pipeline_service.domain.sources import SourceKind
 from media_pipeline_service.domain.ugc import UgcCatalog
@@ -401,6 +405,17 @@ class MediaContainer:
             LinkPolicy(
                 ttl_s=m.link_ttl_s, max_per_window=m.link_max_per_window, window_s=m.link_window_s
             ),
+        )
+
+    @cached_property
+    def issue_cover_links(self) -> IssueCoverLinks:
+        """Пакетная выдача ссылок на обложки карточек."""
+        m = self.settings.media
+        return IssueCoverLinks(
+            self.uow_factory(),
+            self.clock,
+            self.adapters.signer,
+            CoverLinkPolicy(window_s=m.cover_link_window_s, batch_max=m.cover_link_batch_max),
         )
 
     @cached_property
