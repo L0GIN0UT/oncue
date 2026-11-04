@@ -52,6 +52,7 @@ from bff_web_service.application.dto import (
     EventFindTriggerCard,
     EventPageData,
     EventRewardCard,
+    FinalClueLink,
     FriendCard,
     InventoryCard,
     InventoryEntryCard,
@@ -65,6 +66,7 @@ from bff_web_service.application.dto import (
     MatchResult,
     MatchRound,
     Me,
+    MediaLink,
     Mode,
     ModeStart,
     MyMatch,
@@ -252,8 +254,36 @@ class _DailyIn(_In):
         )
 
 
+class _ArtworkIn(_In):
+    url: str
+    expires_at: datetime
+    mime: str
+
+    def dto(self) -> MediaLink:
+        return MediaLink(self.url, self.expires_at, self.mime)
+
+
+class _FinalClueIn(_In):
+    kind: Literal["audio", "image", "text"]
+    url: str
+    expires_at: datetime
+    mime: str
+
+    def dto(self) -> FinalClueLink:
+        return FinalClueLink(self.kind, self.url, self.expires_at, self.mime)
+
+
 class _RevealIn(_In):
     media_item_id: UUID
+    final_clue: _FinalClueIn | None = None
+    artwork: _ArtworkIn | None = None
+
+    def dto(self) -> Reveal:
+        return Reveal(
+            self.media_item_id,
+            artwork=self.artwork.dto() if self.artwork else None,
+            final_clue=self.final_clue.dto() if self.final_clue else None,
+        )
 
 
 class _RoundIn(_In):
@@ -320,7 +350,7 @@ class _ResultIn(_In):
                     outcome=r.outcome,
                     level=r.level,
                     points=r.points,
-                    reveal=Reveal(r.reveal.media_item_id) if r.reveal else None,
+                    reveal=r.reveal.dto() if r.reveal else None,
                 )
                 for r in self.rounds
             ],

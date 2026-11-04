@@ -91,7 +91,17 @@ RESULT = {
                 "title": "Брат",
                 "year": 1997,
                 "persons": [],
-                "final_clue": {"kind": "image", "url": "/media/a/x.jpg", "mime": "image/jpeg"},
+                "final_clue": {
+                    "kind": "image",
+                    "url": "/media/a/x.jpg",
+                    "expires_at": "2026-11-04T12:01:00Z",
+                    "mime": "image/jpeg",
+                },
+                "artwork": {
+                    "url": "/media/a/art.webp",
+                    "expires_at": "2026-11-04T12:01:00Z",
+                    "mime": "image/webp",
+                },
             },
         },
         {"index": 1, "outcome": "void", "level": None, "points": 0, "reveal": None},
@@ -3756,3 +3766,41 @@ def test_new_blocks_are_optional_in_the_contract() -> None:
     }.items():
         assert fields <= set(schemas[model]["properties"])
         assert not fields & set(schemas[model].get("required", []))
+
+
+async def test_results_rounds_carry_artwork_and_final_clue_links(bff: Bff) -> None:
+    token = bff.issuer.issue()
+    bff.stubs.game.route("GET", f"/v1/sessions/{SESSION}/result").respond(200, json=RESULT)
+    bff.stubs.catalog.route("GET", f"/v1/items/{ITEM}").respond(200, json=CARD)
+
+    response = await bff.client.get(f"/v1/pages/results/{SESSION}", headers=bff.bearer(token))
+
+    assert response.status_code == 200, response.text
+    finished, void = response.json()["blocks"]["result"]["data"]["rounds"]
+    assert finished["artwork"] == {
+        "url": "/media/a/art.webp",
+        "expires_at": "2026-11-04T12:01:00Z",
+        "mime": "image/webp",
+    }
+    assert finished["final_clue"] == {
+        "kind": "image",
+        "url": "/media/a/x.jpg",
+        "expires_at": "2026-11-04T12:01:00Z",
+        "mime": "image/jpeg",
+    }
+    assert (void["artwork"], void["final_clue"]) == (None, None)  # void: ссылок нет
+
+
+async def test_results_round_without_artwork_keeps_final_clue(bff: Bff) -> None:
+    token = bff.issuer.issue()
+    reveal = {k: v for k, v in RESULT["rounds"][0]["reveal"].items() if k != "artwork"}
+    body = {**RESULT, "rounds": [{**RESULT["rounds"][0], "reveal": reveal}]}
+    bff.stubs.game.route("GET", f"/v1/sessions/{SESSION}/result").respond(200, json=body)
+    bff.stubs.catalog.route("GET", f"/v1/items/{ITEM}").respond(200, json=CARD)
+
+    response = await bff.client.get(f"/v1/pages/results/{SESSION}", headers=bff.bearer(token))
+
+    assert response.status_code == 200, response.text
+    [round_] = response.json()["blocks"]["result"]["data"]["rounds"]
+    assert round_["artwork"] is None
+    assert round_["final_clue"]["url"] == "/media/a/x.jpg"

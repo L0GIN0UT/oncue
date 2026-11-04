@@ -70,6 +70,15 @@ def asset_json(view: ClueView) -> Json:
     }
 
 
+def _artwork_json(view: ClueView) -> Json:
+    """Картинка ответа (``reveal.artwork``, ``POST .../artwork``)."""
+    return {
+        "url": view.asset.url,
+        "expires_at": iso(view.asset.expires_at),
+        "mime": view.asset.mime,
+    }
+
+
 def round_items(session: GameSession) -> list[UUID]:
     """Единицы, нужные снимку и итогу: цели завершённых раундов (ревил), показанные
     единицы и единицы вариантов выданных раундов. Цель идущего раунда не загружается."""
@@ -201,17 +210,26 @@ class SessionPresenter:
         view = self._cache.get(session.id, r.index, ARTWORK)
         if view is None:
             try:
-                link = await self._assets.link(r.artwork_asset, 1, subject_of(session.id))
+                return await self.issue_artwork(session, r)
             except (GoneError, DependencyUnavailableError, RateLimitedError):
                 log.warning("game.artwork_unavailable", session_id=str(session.id), round=r.index)
                 return None
-            view = ClueView(level=1, kind="image", asset=link)
-            self._cache.put(session.id, r.index, view, ARTWORK)
-        return {
-            "url": view.asset.url,
-            "expires_at": iso(view.asset.expires_at),
-            "mime": view.asset.mime,
-        }
+        return _artwork_json(view)
+
+    async def issue_artwork(self, session: GameSession, r: Round) -> Json:
+        """Свежая ссылка картинки ответа (мимо кэша) — ``POST .../artwork``; кладётся в кэш.
+
+        Raises:
+            GoneError: набор картинки недоступен.
+            DependencyUnavailableError: media-pipeline недоступен.
+            RateLimitedError: лимит выдачи ссылок media-pipeline.
+        """
+        if r.artwork_asset is None:
+            raise GoneError("у раунда нет картинки ответа")
+        link = await self._assets.link(r.artwork_asset, 1, subject_of(session.id))
+        view = ClueView(level=1, kind="image", asset=link)
+        self._cache.put(session.id, r.index, view, ARTWORK)
+        return _artwork_json(view)
 
     async def _shown_clue(
         self,

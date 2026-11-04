@@ -16,6 +16,7 @@ from pydantic import BaseModel
 from game_service.api.common import ApiServices, NoStoreRoute, player_of
 from game_service.api.public.schemas import (
     MAX_ROUND_INDEX,
+    Artwork,
     ClueOut,
     ClueRequest,
     CollectionModeOut,
@@ -285,6 +286,22 @@ def build_public_router(c: ApiServices) -> APIRouter:
     async def final_clue(session_id: SessionId, index: RoundIndex, subject: Subject) -> ClueOut:
         clue = await c.play.final_clue(player_of(subject), session_id, index)
         return ClueOut.model_validate(clue)
+
+    @router.post(
+        "/sessions/{session_id}/rounds/{index}/artwork",
+        response_model=Artwork,
+        summary="Свежая ссылка на картинку ответа",
+        description=(
+            "Обложка или постер ответа (ADR 0073), когда ссылка из ревила или итогов истекла. "
+            "Только для завершённого не-void раунда своей сессии; ограничена лимитом. "
+            "Ошибки: 409 `game.round_not_finished`, 410 `game.asset_unavailable` (в том числе "
+            "когда у единицы нет картинки), 429."
+        ),
+        responses=problem_responses(401, 404, 409, 410, 422, 429, 503),
+    )
+    async def artwork(session_id: SessionId, index: RoundIndex, subject: Subject) -> Artwork:
+        view = await c.play.artwork(player_of(subject), session_id, index)
+        return Artwork.model_validate(view)
 
     @router.get(
         "/me/records",

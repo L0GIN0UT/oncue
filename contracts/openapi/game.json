@@ -7103,6 +7103,160 @@
         ]
       }
     },
+    "/v1/sessions/{session_id}/rounds/{index}/artwork": {
+      "post": {
+        "description": "Обложка или постер ответа (ADR 0073), когда ссылка из ревила или итогов истекла. Только для завершённого не-void раунда своей сессии; ограничена лимитом. Ошибки: 409 `game.round_not_finished`, 410 `game.asset_unavailable` (в том числе когда у единицы нет картинки), 429.",
+        "operationId": "artwork_v1_sessions__session_id__rounds__index__artwork_post",
+        "parameters": [
+          {
+            "description": "Идентификатор сессии",
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "description": "Идентификатор сессии",
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Номер раунда с 0",
+            "in": "path",
+            "name": "index",
+            "required": true,
+            "schema": {
+              "description": "Номер раунда с 0",
+              "maximum": 199,
+              "minimum": 0,
+              "title": "Index",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Artwork"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не найдено"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Конфликт состояния"
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Ресурс больше недоступен"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Слишком много запросов"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Зависимость временно недоступна"
+          }
+        },
+        "summary": "Свежая ссылка на картинку ответа",
+        "tags": [
+          "game"
+        ]
+      }
+    },
     "/v1/sessions/{session_id}/rounds/{index}/clue": {
       "post": {
         "description": "POST: каждая выдача пишется в журнал media-pipeline и ограничена лимитом. Ошибки: 403 `game.level_locked`, 410 `game.asset_unavailable` (раунд становится `void`), 429, 503 `game.assets_unavailable`.",

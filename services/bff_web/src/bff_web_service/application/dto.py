@@ -159,10 +159,31 @@ class DailyStatus:
 
 
 @dataclass(frozen=True, slots=True)
+class MediaLink:
+    """Подписанная ссылка на картинку (артворк ответа)."""
+
+    url: str
+    expires_at: datetime
+    mime: str
+
+
+@dataclass(frozen=True, slots=True)
+class FinalClueLink:
+    """Подписанная ссылка на полный фрагмент ответа (аудио или кадр)."""
+
+    kind: Literal["audio", "image", "text"]
+    url: str
+    expires_at: datetime
+    mime: str
+
+
+@dataclass(frozen=True, slots=True)
 class Reveal:
-    """Ответ раунда (нужен только id единицы для карточки catalog)."""
+    """Ответ раунда: id единицы для карточки catalog и ссылки для экрана итогов."""
 
     media_item_id: UUID
+    artwork: MediaLink | None = None
+    final_clue: FinalClueLink | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -459,6 +480,8 @@ class ResultRoundCard:
     points: int
     media_item_id: UUID | None
     exact_pct: float | None = None
+    artwork: MediaLink | None = None
+    final_clue: FinalClueLink | None = None
 
 
 @dataclass(frozen=True, slots=True)

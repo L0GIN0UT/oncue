@@ -723,6 +723,23 @@ class ItemCard(BaseModel):
     external_links: list[ExternalLink] = Field(default_factory=list)
 
 
+class ResultArtwork(BaseModel):
+    """Картинка ответа раунда (форма как ``Reveal.artwork`` в game, ADR 0073)."""
+
+    url: str
+    expires_at: datetime
+    mime: str
+
+
+class ResultFinalClue(BaseModel):
+    """Полный фрагмент ответа (форма как ``Reveal.final_clue`` в game): аудио или кадр."""
+
+    kind: Literal["audio", "image", "text"]
+    url: str
+    expires_at: datetime
+    mime: str
+
+
 class ResultRoundCard(BaseModel):
     """Раунд итога (из ``game /v1/sessions/{id}/result``)."""
 
@@ -733,6 +750,22 @@ class ResultRoundCard(BaseModel):
     media_item_id: UUID | None = Field(description="null у раунда void")
     exact_pct: float | None = Field(
         default=None, ge=0, le=100, description="Доля угадавших (только дейлик)"
+    )
+    artwork: ResultArtwork | None = Field(
+        default=None,
+        description=(
+            "Обложка/постер ответа; подписанная ссылка на 60 с. null у void-раунда, без картинки "
+            "и при сбое выдачи (клиент рисует заглушку). Перевыдача после истечения — "
+            "`POST /api/game/v1/sessions/{id}/rounds/{i}/artwork`"
+        ),
+    )
+    final_clue: ResultFinalClue | None = Field(
+        default=None,
+        description=(
+            "Полный фрагмент ответа (30 с аудио, кадр для blackout и кадровых режимов); ссылка "
+            "на 60 с. null у void-раунда. Перевыдача — "
+            "`POST /api/game/v1/sessions/{id}/rounds/{i}/final-clue`"
+        ),
     )
 
 
