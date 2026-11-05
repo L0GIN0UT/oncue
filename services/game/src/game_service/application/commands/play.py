@@ -880,12 +880,15 @@ class PlayService:
                     finished_now = await self._settle(uow, session, rules, now)
                     await self._after_move(uow, session, rules, finished_now=finished_now)
                     items = await items_for(uow, session)
-                    snapshot = await self._presenter.snapshot(session, rules, items)
+                    # Сеть (media) под блокировкой строки сессии не трогаем: ссылку предзагрузки
+                    # добавит _with_preload после коммита.
+                    snapshot = await self._presenter.snapshot(session, rules, items, preload=False)
                     return {
                         "result": move.result,
                         "round": snapshot["rounds"][index],
                         "session": snapshot,
                         "stats": stats,
+                        "next_round_first_clue": None,
                     }
 
                 response, _ = await run_idempotent(
@@ -894,7 +897,33 @@ class PlayService:
                 await uow.commit()
         except _DesyncSignal:
             raise desync(await self.snapshot(player, session_id)) from None
-        return response
+        return await self._with_preload(player, session_id, response)
+
+    async def _with_preload(self, player: Player, session_id: UUID, response: Json) -> Json:
+        """Добавить в ответ хода ссылку на уровень 1 следующего раунда (ADR 0077).
+
+        Вне транзакции хода и вне сохранённого ответа идемпотентности: повтор хода получает
+        свежую (или кэшированную) ссылку, а не просроченную из хранилища. Любой сбой выдачи -
+        ответ без поля: ход уже применён.
+        """
+        mode = response["session"]["mode"]
+        rules = await self._catalog.rules(mode["key"], mode["version"])
+        if not rules.preload_next_round or response["session"]["status"] != "active":
+            return response
+        async with self._uow() as uow:
+            session = await self._load(uow, player, session_id)
+        try:
+            clue = await self._presenter.next_round_first_clue(session, rules)
+        except AppError:
+            log.warning("game.preload_failed", session_id=str(session_id))
+            return response
+        if clue is None:
+            return response
+        return {
+            **response,
+            "next_round_first_clue": clue,
+            "session": {**response["session"], "next_round_first_clue": clue},
+        }
 
     async def _pick_stats(
         self, uow: GameUnitOfWork, session: GameSession, r: Round, rules: ModeRules
@@ -925,6 +954,10 @@ class PlayService:
         ):
             # Сигнал для детектора аномалий (этап 5): точный ответ слишком быстро.
             log.warning("game.fast_exact", round=r.index, elapsed_ms=elapsed)
+        if exact and elapsed is None:
+            # Точный ответ без выдачи ассета (при предзагрузке уровень 1 слушают по ссылке из
+            # снимка): времени нет, fast_exact не сработает - оставляем след для детектора.
+            log.info("game.exact_without_clue", round=r.index)
         outcome = RoundOutcome(
             result=state.outcome or RoundResult.MISS,
             level=state.level if exact else None,

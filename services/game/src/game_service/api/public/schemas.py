@@ -306,6 +306,14 @@ class SessionSnapshot(BaseModel):
     max_score: int
     current_round: int
     rounds: list[RoundOut]
+    next_round_first_clue: ClueOut | None = Field(
+        default=None,
+        description=(
+            "Предзагрузка: уровень 1 следующего раунда, когда предыдущий завершён, а следующий "
+            "ещё не начат (режимы с `features.preload_next_round`); иначе null. Таймер не "
+            "запускает: старт раунда по-прежнему `POST .../clue`"
+        ),
+    )
 
 
 # ----------------------------------------------------------------------------- ассеты
@@ -410,6 +418,9 @@ class MoveResult(BaseModel):
     round: RoundOut
     session: SessionSnapshot
     stats: MoveStats | None = None
+    next_round_first_clue: ClueOut | None = Field(
+        default=None, description="То же, что `session.next_round_first_clue`"
+    )
 
 
 # ----------------------------------------------------------------------------- итог

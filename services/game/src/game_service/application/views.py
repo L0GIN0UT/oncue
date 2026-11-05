@@ -35,7 +35,8 @@ log = structlog.get_logger(__name__)
 
 REVEAL = "reveal"
 ARTWORK = "artwork"
-"""Тег кэша: ассет ревила раунда."""
+PRELOAD = "preload"
+"""Теги кэша ссылок: ревил, картинка ответа, предзагруженный уровень 1 следующего раунда."""
 
 
 def subject_of(session_id: UUID) -> str:
@@ -386,10 +387,48 @@ class SessionPresenter:
             planned = max(planned, rules.rounds - len(session.rounds))
         return planned
 
+    async def next_round_first_clue(self, session: GameSession, rules: ModeRules) -> Json | None:
+        """Ссылка на уровень 1 следующего раунда (предзагрузка, ``features.preload_next_round``).
+
+        Выдаётся, только когда предыдущий раунд завершён, а следующий (активный) ещё не начат:
+        уровень 1 клиент и так получает при старте раунда, ссылок на будущие уровни нет.
+        ``started_at`` не ставится: отсчёт запускает обычный ``POST .../clue``. Любой сбой
+        выдачи (набор выключен, media недоступен, лимит) даёт ``None``: раунд аннулирует
+        только настоящая выдача уровня.
+        """
+        if not rules.preload_next_round or not session.is_active:
+            return None
+        r = session.rounds[-1]
+        if r.index == 0 or r.finished or r.is_void or r.started_at is not None or r.asset is None:
+            return None
+        if not session.rounds[r.index - 1].finished:  # инвариант: раунды материализуются по одному
+            return None
+        view = self._cache.get(session.id, r.index, PRELOAD)
+        if view is None:
+            try:
+                view = await rules.clue_view(
+                    r.state, r.asset, 1, assets=self._assets, subject=subject_of(session.id)
+                )
+            except (GoneError, DependencyUnavailableError, RateLimitedError):
+                log.warning("game.preload_unavailable", session_id=str(session.id), round=r.index)
+                return None
+            self._cache.put(session.id, r.index, view, PRELOAD)
+        return clue_json(view)
+
     async def snapshot(
-        self, session: GameSession, rules: ModeRules, items: Mapping[UUID, CatalogItem]
+        self,
+        session: GameSession,
+        rules: ModeRules,
+        items: Mapping[UUID, CatalogItem],
+        *,
+        preload: bool = True,
     ) -> Json:
-        """Снимок сессии (план — пустыми раундами ``pending``)."""
+        """Снимок сессии (план — пустыми раундами ``pending``).
+
+        Args:
+            preload: Выдать ``next_round_first_clue`` (сеть). ``False`` - внутри транзакции
+                хода: ссылку добавляет вызывающий после коммита.
+        """
         rounds = [await self.round_json(session, r, rules, items) for r in session.rounds]
         start = len(rounds)
         rounds += [
@@ -410,6 +449,9 @@ class SessionPresenter:
             "max_score": session.max_score,
             "current_round": session.current_index,
             "rounds": rounds,
+            "next_round_first_clue": (
+                await self.next_round_first_clue(session, rules) if preload else None
+            ),
         }
 
     # ------------------------------------------------------------------ итог

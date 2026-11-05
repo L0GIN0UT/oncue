@@ -47,3 +47,4 @@ session:
   abandon_after_min: 120
 features:
   share: true
+  preload_next_round: true
