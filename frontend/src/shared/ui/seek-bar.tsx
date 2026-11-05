@@ -12,6 +12,9 @@ import { cn } from "@/shared/lib/cn";
 const STEP_S = 1;
 const PAGE_S = 5;
 
+/** Секунды с точностью до десятой: уровень на 0,5 с не должен округляться до целой секунды. */
+const tenths = (v: number) => Math.round(v * 10) / 10;
+
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 
 /** Секунда под указателем: позиция по полосе → время, прижатое к открытой части `[0, open]`. */
@@ -79,11 +82,11 @@ export function SeekBar({ value, max, open, onSeek, className }: Props) {
       tabIndex={0}
       aria-label={t("game.seek.label")}
       aria-valuemin={0}
-      aria-valuemax={Math.round(limit)}
-      aria-valuenow={Math.round(now)}
+      aria-valuemax={tenths(limit)}
+      aria-valuenow={tenths(now)}
       aria-valuetext={t("game.seek.valueText", {
-        current: Math.round(now),
-        total: Math.round(limit),
+        current: tenths(now),
+        total: tenths(limit),
       })}
       data-testid="seek-bar"
       onKeyDown={onKeyDown}

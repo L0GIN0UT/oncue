@@ -433,7 +433,7 @@
     "tapeLabel": "Подсказки: открыт уровень {level} из {total}",
     "seek": {
       "label": "Перемотка",
-      "valueText": "{current} с из {total} с"
+      "valueText": "{current, number} с из {total, number} с"
     },
     "listen": "Слушать {seconds} с",
     "listenPlain": "Слушать",

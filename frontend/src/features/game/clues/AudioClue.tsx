@@ -24,7 +24,6 @@ export function AudioClue({ clue, onProgress, scene = "stage" }: ClueStageProps)
       data-testid="clue-scene"
     >
       <SeekableAudio
-        key={clue.objectUrl}
         objectUrl={clue.objectUrl}
         seconds={clue.meta.seconds ?? null}
         onProgress={onProgress}

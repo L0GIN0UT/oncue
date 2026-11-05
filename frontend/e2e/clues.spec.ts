@@ -78,3 +78,43 @@ test("кадр за кадром: уровень открывает другой
   await expect(page.getByTestId("clue-image-hint")).toHaveText("Кадр 2");
   expect(await frame.getAttribute("src")).not.toBe(first);
 });
+
+for (const [mode, node] of [
+  ["film.random.frame", "clue-image"],
+  ["music.random.classic", "clue-audio"],
+] as const) {
+  test(`${mode}: «Пропустить» не схлопывает страницу и не роняет прокрутку`, async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 600 });
+    await page.goto(`/play/${mode}`);
+    const clue = page.getByTestId(node);
+    await expect(clue).toBeAttached();
+    await clue.evaluate((el) => {
+      // Любое удаление узла загадки и самая низкая высота страницы за время смены уровня.
+      const w = window as unknown as { __flick: { removed: number; minHeight: number } };
+      w.__flick = { removed: 0, minHeight: document.documentElement.scrollHeight };
+      new MutationObserver(() => {
+        if (!el.isConnected) w.__flick.removed += 1;
+      }).observe(document.body, { childList: true, subtree: true });
+      const sample = () => {
+        w.__flick.minHeight = Math.min(w.__flick.minHeight, document.documentElement.scrollHeight);
+        requestAnimationFrame(sample);
+      };
+      sample();
+    });
+    const before = await page.evaluate(() => document.documentElement.scrollHeight);
+    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+    const scrolled = await page.evaluate(() => window.scrollY);
+
+    await page.getByTestId("skip").click();
+    // Итог: пропуск записан в историю, а не «подождали N мс».
+    await expect(page.getByTestId("attempts").locator('[data-result="skip"]')).toHaveCount(1);
+
+    const flick = await page.evaluate(
+      () => (window as unknown as { __flick: { removed: number; minHeight: number } }).__flick,
+    );
+    expect(flick.removed).toBe(0);
+    expect(flick.minHeight).toBeGreaterThanOrEqual(before);
+    expect(await page.evaluate(() => window.scrollY)).toBeGreaterThanOrEqual(scrolled);
+    await expect(clue).toBeAttached();
+  });
+}

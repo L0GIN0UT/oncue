@@ -46,6 +46,17 @@ export function SeekableAudio({
   const muted = useMuted();
   const limit = playbackLimit(seconds, duration);
 
+  // Новый ассет (следующий уровень) — тот же плеер и тот же `<audio>`, но с чистого листа:
+  // размонтирование на смене уровня схлопывало бы высоту страницы.
+  const [loadedUrl, setLoadedUrl] = useState(objectUrl);
+  if (loadedUrl !== objectUrl) {
+    setLoadedUrl(objectUrl);
+    setPlaying(false);
+    setPlayed(false);
+    setTime(0);
+    setDuration(Number.NaN);
+  }
+
   useEffect(() => {
     const el = audio.current;
     return () => {
