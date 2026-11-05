@@ -87,6 +87,7 @@ class FakeScorer:
     params_schema: ClassVar[type[BaseModel]] = _Params
     presentation: ClassVar[str] = "score"
     requires_early_end: ClassVar[bool] = False
+    time_based: ClassVar[bool] = False
 
     def score(self, outcome: Any, params: BaseModel) -> int:
         return 0

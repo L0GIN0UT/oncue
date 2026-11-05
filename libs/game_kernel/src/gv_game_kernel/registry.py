@@ -108,6 +108,12 @@ RECORDS_UNSUPPORTED = "config.records_unsupported"
 RECORDS_FEATURE = "records"
 """Флаг ``features.records`` — личные рекорды и процентиль режима (ADR 0027)."""
 
+PRELOAD_FEATURE = "preload_next_round"
+"""Флаг `features.preload_next_round` - ссылка на уровень 1 следующего раунда в ответе на ход."""
+
+PRELOAD_UNSAFE = "config.preload_unsafe"
+"""Код проблемы: предзагрузка даёт преимущество (онлайн, рейтинг или очки по времени)."""
+
 PLAYERS_RANGE = "config.players_range"
 """Код проблемы: ``players.min`` больше максимума (``players.max`` или варианта лобби)."""
 
@@ -644,6 +650,12 @@ def _compatibility_issues(
         and config.features.get(RECORDS_FEATURE)
     ):
         issues.append(ConfigIssue(f"features.{RECORDS_FEATURE}", RECORDS_UNSUPPORTED))
+    if config.features.get(PRELOAD_FEATURE) and (
+        isinstance(config.session, OnlineSessionSpec) or (scorer is not None and scorer.time_based)
+    ):
+        # Онлайн (и рейтинг): ранняя ссылка - преимущество над соперником. Время в очках:
+        # можно послушать до старта таймера. Остальные режимы включают флаг конфигом.
+        issues.append(ConfigIssue(f"features.{PRELOAD_FEATURE}", PRELOAD_UNSAFE))
     return issues
 
 
@@ -711,6 +723,8 @@ __all__ = [
     "PARTIAL_DOMAIN_UNSUPPORTED",
     "PARTIAL_UNSUPPORTED",
     "PLAYERS_RANGE",
+    "PRELOAD_FEATURE",
+    "PRELOAD_UNSAFE",
     "RECORDS_FEATURE",
     "RECORDS_UNSUPPORTED",
     "SESSION_UNSUPPORTED",

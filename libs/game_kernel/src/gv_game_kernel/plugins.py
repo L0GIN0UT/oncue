@@ -564,12 +564,15 @@ class Scorer(Protocol):
             этапа 3a; клиент выбирает экран итога по нему).
         requires_early_end: Нужно правило досрочного завершения (``EndRule.ends_early``):
             серия без «жизней» не заканчивается на промахе.
+        time_based: Очки зависят от времени (`RoundOutcome.elapsed_ms`): ранний доступ к ссылке
+            даёт преимущество, поэтому предзагрузка (`features.preload_next_round`) запрещена.
     """
 
     key: ClassVar[str]
     params_schema: ClassVar[type[BaseModel]]
     presentation: ClassVar[str]
     requires_early_end: ClassVar[bool]
+    time_based: ClassVar[bool]
 
     def score(self, outcome: RoundOutcome, params: BaseModel) -> int:
         """Очки за раунд (``void`` и ``gave_up`` без частичного — 0)."""

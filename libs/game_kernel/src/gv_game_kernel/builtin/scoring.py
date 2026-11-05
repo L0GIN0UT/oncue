@@ -67,6 +67,7 @@ class ByLevelScorer:
     params_schema: ClassVar[type[BaseModel]] = ByLevelParams
     presentation: ClassVar[str] = SCORE_PRESENTATION
     requires_early_end: ClassVar[bool] = False
+    time_based: ClassVar[bool] = False
 
     def score(self, outcome: RoundOutcome, params: BaseModel) -> int:
         """Очки за раунд (``void``, ``miss`` и ``gave_up`` без частичного — 0).
@@ -134,6 +135,7 @@ class BySpeedScorer:
     presentation: ClassVar[str] = SCORE_PRESENTATION
     params_schema: ClassVar[type[BaseModel]] = BySpeedParams
     requires_early_end: ClassVar[bool] = False
+    time_based: ClassVar[bool] = True
 
     def score(self, outcome: RoundOutcome, params: BaseModel) -> int:
         """Очки за раунд (``void``, ``miss`` и ``gave_up`` без частичного — 0)."""
@@ -193,6 +195,7 @@ class StreakScorer:
     params_schema: ClassVar[type[BaseModel]] = StreakParams
     presentation: ClassVar[str] = STREAK_PRESENTATION
     requires_early_end: ClassVar[bool] = True
+    time_based: ClassVar[bool] = False
 
     def score(self, outcome: RoundOutcome, params: BaseModel) -> int:
         """``points_per_round`` за ``exact``."""
@@ -223,6 +226,7 @@ class NoneScorer:
     params_schema: ClassVar[type[BaseModel]] = NoneParams
     presentation: ClassVar[str] = BRACKET_PRESENTATION
     requires_early_end: ClassVar[bool] = False
+    time_based: ClassVar[bool] = False
 
     def score(self, outcome: RoundOutcome, params: BaseModel) -> int:
         """Всегда 0."""
@@ -269,6 +273,7 @@ class PartySpeedScorer:
     params_schema: ClassVar[type[BaseModel]] = PartySpeedParams
     presentation: ClassVar[str] = SCORE_PRESENTATION
     requires_early_end: ClassVar[bool] = False
+    time_based: ClassVar[bool] = True
 
     def score(self, outcome: RoundOutcome, params: BaseModel) -> int:
         """Очки за раунд (``exact`` — полная доля, частичный — ``× partial_ratio``)."""

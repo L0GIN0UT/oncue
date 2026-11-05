@@ -1580,6 +1580,17 @@
       "MoveResult": {
         "description": "Итог хода.",
         "properties": {
+          "next_round_first_clue": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ClueOut"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "То же, что `session.next_round_first_clue`"
+          },
           "result": {
             "anyOf": [
               {
@@ -3032,6 +3043,17 @@
           },
           "mode": {
             "$ref": "#/components/schemas/ModeRef"
+          },
+          "next_round_first_clue": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ClueOut"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Предзагрузка: уровень 1 следующего раунда, когда предыдущий завершён, а следующий ещё не начат (режимы с `features.preload_next_round`); иначе null. Таймер не запускает: старт раунда по-прежнему `POST .../clue`"
           },
           "rounds": {
             "items": {

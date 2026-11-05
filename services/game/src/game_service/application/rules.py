@@ -58,6 +58,9 @@ MAX_PERIOD_DAYS = 31
 RECORDS_FEATURE = "records"
 """Флаг ``features.records``: личные рекорды и процентиль (D11)."""
 
+PRELOAD_FEATURE = "preload_next_round"
+"""Флаг `features.preload_next_round`: ссылка на уровень 1 следующего раунда (совпадает с ядром)."""
+
 SUPPORTED_SESSIONS: frozenset[str] = frozenset({"solo", *get_args(OnlineKind)})
 """Виды сессий, конфиги которых game хранит и публикует (ADR 0032): соло играет сам game,
 онлайн (``duel``/``party``/``lobby``) — match по плану раундов game. Играть онлайн-режим
@@ -184,6 +187,14 @@ class ModeRules:
     def records_enabled(self) -> bool:
         """Личные рекорды режима включены флагом ``features.records`` (D11)."""
         return bool(self.config.features.get(RECORDS_FEATURE, False))
+
+    @property
+    def preload_next_round(self) -> bool:
+        """Ссылка на уровень 1 следующего раунда в ответе на ход включена флагом режима.
+
+        Конфиг не принимает флаг при ранге, онлайне и очках по времени (`config.preload_unsafe`).
+        """
+        return bool(self.config.features.get(PRELOAD_FEATURE, False))
 
     @property
     def is_progressive(self) -> bool:
