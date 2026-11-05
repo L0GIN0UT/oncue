@@ -8,21 +8,57 @@ import { expect, login, test } from "./fixtures";
 import { pickLadder } from "./hubs";
 import { QUEUE_TICK_S } from "./mocks/match";
 
-/** Предел ожидания «матч найден»: несколько периодов heartbeat мока. */
-const TICK_WAIT = { timeout: (QUEUE_TICK_S * 3 + 4) * 1000 };
+/** Комната матча: `/room/<код из 8 символов>`. */
+const ROOM_URL = /\/room\/[A-HJ-NP-Z2-9]{8}$/;
+
+/**
+ * Предел ожидания «матч найден → комната»: несколько периодов heartbeat мока и запас на
+ * нагруженный CI (сам переход идёт после паузы «Соперник найден», FOUND_DELAY_MS = 900 мс).
+ */
+const ROOM_WAIT = { timeout: Math.max((QUEUE_TICK_S * 3 + 4) * 1000, 30_000) };
+
+/** Одна попытка ждёт комнату дольше паузы «Соперник найден» (900 мс) и самого перехода. */
+const ATTEMPT_MS = 4000;
+
+/**
+ * Экран «Соперник найден» живёт ровно `FOUND_DELAY_MS` и сменяется комнатой, поэтому ждать его
+ * через `toBeVisible` нельзя: надпись легко пропустить между опросами. Наблюдатель DOM запоминает,
+ * что она появлялась (вкладка не перезагружается: переход в комнату клиентский), а тест
+ * проверяет это уже после перехода — {@link expectQueueFoundSeen}. Ставить перед входом в очередь.
+ */
+async function watchQueueFound(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const w = window as unknown as { __queueFoundSeen?: boolean };
+    w.__queueFoundSeen = false;
+    const check = () => {
+      if (document.querySelector("[data-testid=queue-found]")) w.__queueFoundSeen = true;
+    };
+    new MutationObserver(check).observe(document.body, { childList: true, subtree: true });
+    check();
+  });
+}
+
+/** Экран «Соперник найден» показывался (см. {@link watchQueueFound}). */
+async function expectQueueFoundSeen(page: Page): Promise<void> {
+  const seen = await page.evaluate(
+    () => (window as unknown as { __queueFoundSeen?: boolean }).__queueFoundSeen,
+  );
+  expect(seen, "экран «Соперник найден» не показывался").toBe(true);
+}
 
 /**
  * Первому игроку о матче сообщает heartbeat очереди. Ждать его по таймеру нестабильно на
  * нагруженном CI (интервал и нагрузка расходятся), поэтому сами «возвращаем вкладку»:
  * хук очереди на `visibilitychange` делает `tick` сразу (так же, как при реальном возврате
- * на вкладку). Повторяем, пока ответ не придёт, в пределах `TICK_WAIT`.
+ * на вкладку). Ждём результат — URL комнаты, а не промежуточную надпись: она живёт 900 мс.
+ * Повторные tick безвредны: после «матч найден» переход уже запланирован.
  */
-async function expectQueueFound(page: Page): Promise<void> {
-  const found = page.getByTestId("queue-found");
+async function expectQueueFound(page: Page, room: RegExp | string = ROOM_URL): Promise<void> {
   await expect(async () => {
     await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
-    await expect(found).toBeVisible({ timeout: 1000 });
-  }).toPass(TICK_WAIT);
+    await expect(page).toHaveURL(room, { timeout: ATTEMPT_MS });
+  }).toPass(ROOM_WAIT);
+  await expectQueueFoundSeen(page);
 }
 
 test("хаб: звание со ступенью, калибровка вместо звания, сезон и топ недели; то же в профиле", async ({
@@ -79,19 +115,20 @@ test("очередь: ожидание, подсказка, отмена; вто
 
   // Снова в очередь; соперник встаёт в ту же — его перебрасывает в комнату сразу.
   await pickLadder(page, "music");
+  await watchQueueFound(page);
   await page.getByTestId("queue-enter-music-classic").click();
   await expect(page.getByTestId("queue-searching")).toBeVisible();
   const rival = await player("rival");
   await rival.goto("/online");
   await pickLadder(rival, "music");
+  await watchQueueFound(rival);
   await rival.getByTestId("queue-enter-music-classic").click();
-  await expect(rival.getByTestId("queue-found")).toBeVisible();
-  await expect(rival).toHaveURL(/\/room\/[A-HJ-NP-Z2-9]{8}$/);
+  await expect(rival).toHaveURL(ROOM_URL);
+  await expectQueueFoundSeen(rival);
   const code = (await rival.getByTestId("room-code").textContent())!.trim();
 
   // Первому о матче сообщает heartbeat; вкладка видима — переход в комнату.
-  await expectQueueFound(page);
-  await expect(page).toHaveURL(`/room/${code}`);
+  await expectQueueFound(page, `/room/${code}`);
   await expect(page.getByTestId("room-code")).toHaveText(code);
   await expect(page.getByTestId("player-rival")).toBeVisible();
 
@@ -127,22 +164,23 @@ test("стык очередь → комната: запись снята, tick 
   await login(page);
   await page.goto("/online");
   await pickLadder(page, "music");
+  await watchQueueFound(page);
   await page.getByTestId("queue-enter-music-classic").click();
   await expect(page.getByTestId("queue-searching")).toBeVisible();
 
   const rival = await player("rival");
   await rival.goto("/online");
   await pickLadder(rival, "music");
+  await watchQueueFound(rival);
   await rival.getByTestId("queue-enter-music-classic").click();
-  await expect(rival.getByTestId("queue-found")).toBeVisible();
-  await expect(rival).toHaveURL(/\/room\/[A-HJ-NP-Z2-9]{8}$/);
+  await expect(rival).toHaveURL(ROOM_URL);
+  await expectQueueFoundSeen(rival);
   const code = (await rival.getByTestId("room-code").textContent())!.trim();
 
   // Первому игроку tick отвечает 404, но «Вас убрали из очереди» не появляется: клиент спрашивает
   // активную комнату и входит в неё.
-  await expectQueueFound(page);
+  await expectQueueFound(page, `/room/${code}`);
   await expect(page.getByTestId("queue-error")).toHaveCount(0);
-  await expect(page).toHaveURL(`/room/${code}`);
   await expect(page.getByTestId("player-rival")).toBeVisible();
 });
 
@@ -155,13 +193,13 @@ test("rating недоступен: итог рейтингового матча 
   await login(page);
   await page.goto("/online");
   await pickLadder(page, "film");
+  await watchQueueFound(page);
   await page.getByTestId("queue-enter-film-classic").click();
   const rival = await player("rival");
   await rival.goto("/online");
   await pickLadder(rival, "film");
   await rival.getByTestId("queue-enter-film-classic").click();
   await expectQueueFound(page);
-  await expect(page).toHaveURL(/\/room\/[A-HJ-NP-Z2-9]{8}$/);
   await page.getByTestId("ready-toggle").click();
   await rival.getByTestId("ready-toggle").click();
   await page.getByTestId("start-match").click();
