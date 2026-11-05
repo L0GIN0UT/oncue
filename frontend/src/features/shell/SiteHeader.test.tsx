@@ -70,7 +70,7 @@ describe("SiteHeader", () => {
     expect(screen.getByTestId("nav-profile")).toHaveAttribute("href", "/profile");
     expect(screen.getByTestId("user-name")).toHaveTextContent("L0GIN0UT");
     // Медиатека (полки «Просмотрено», «Смотреть позже», «Любимое») — пунктом рядом с лидерами.
-    expect(screen.getByTestId("nav-library")).toHaveAttribute("href", "/library");
+    expect(screen.getByTestId("nav-library-icon")).toHaveAttribute("href", "/library");
     expect(screen.getByRole("link", { name: "Медиатека" })).toBeInTheDocument();
     expect(screen.queryByTestId("menu-button")).toBeNull();
   });
@@ -81,7 +81,7 @@ describe("SiteHeader", () => {
     expect(screen.getByRole("link", { name: "Войти" })).toHaveAttribute("href", "/login");
     expect(screen.queryByTestId("nav-verses")).toBeNull();
     expect(screen.queryByTestId("nav-profile")).toBeNull();
-    expect(screen.queryByTestId("nav-library")).toBeNull(); // медиатека гостю недоступна (D7)
+    expect(screen.queryByTestId("nav-library-icon")).toBeNull(); // медиатека гостю недоступна (D7)
   });
 });
 

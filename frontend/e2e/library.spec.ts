@@ -59,7 +59,7 @@ test("гость: медиатека предлагает регистрацию
 }) => {
   await page.goto("/");
   await expect(page.getByTestId("nav-collections")).toBeVisible();
-  await expect(page.getByTestId("nav-library")).toHaveCount(0);
+  await expect(page.getByTestId("nav-library-icon")).toHaveCount(0);
   await page.goto("/library");
   await expect(
     page.getByRole("heading", { name: "Медиатека — для игроков с аккаунтом" }),
