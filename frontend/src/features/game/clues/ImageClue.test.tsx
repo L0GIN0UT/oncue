@@ -16,17 +16,11 @@ const clue = (meta: LoadedClue["meta"]): LoadedClue => ({
 });
 
 describe("ImageClue", () => {
-  it("подпись уровня кадра — из meta.crop и meta.blur_px ядра", () => {
-    renderWithProviders(<ImageClue clue={clue({ blur_px: 48, crop: 0.35 })} />);
-    expect(screen.getByTestId("clue-image-hint")).toHaveTextContent(
-      "Видно 35% кадра · размытие 48 px",
-    );
-  });
-
-  it("постер — meta.pixel_block; последний уровень без подписи", () => {
-    expect(imageHintParts({ pixel_block: 16 })).toEqual([{ key: "game.posterPixels", px: 16 }]);
-    renderWithProviders(<ImageClue clue={clue({ blur_px: 0, crop: 1 })} />);
+  it("техническая подпись (обрезка, размытие, пиксели) игроку не показывается", () => {
+    renderWithProviders(<ImageClue clue={clue({ blur_px: 48, crop: 0.35, pixel_block: 16 })} />);
     expect(screen.queryByTestId("clue-image-hint")).not.toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent(/размытие|Видно \d+% кадра|Пиксели/);
+    expect(imageHintParts({ blur_px: 48, crop: 0.35, pixel_block: 16 })).toEqual([]);
   });
 
   it("последовательность кадров — уровень открывает другой кадр (meta.frame)", () => {

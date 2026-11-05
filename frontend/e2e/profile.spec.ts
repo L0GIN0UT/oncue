@@ -81,12 +81,12 @@ test("профиль игрока: уровень и бейджи; неизве�
 
   await login(page);
   await page.goto("/players/00000000-0000-4000-8000-000000000902");
-  await expect(page.getByTestId("player-level")).toHaveText(/Уровень 12/);
+  await expect(page.getByTestId("player-level")).toHaveText("12");
   await expect(page.getByTestId("player-badge-first_win")).toContainText("Первая победа");
   // Ник из social вместо «Игрок» и жалоба на чужую аватарку (ADR 0069).
   await expect(page.getByTestId("player-nickname")).toHaveText("Мастер");
   await page.getByTestId("report-avatar").click();
-  await expect(page.getByRole("dialog")).toContainText("Жалоба на аватарку");
+  await expect(page.getByRole("dialog")).toContainText("Жалоба на аватар");
   await page.keyboard.press("Escape");
   await expectAccessible(page);
 

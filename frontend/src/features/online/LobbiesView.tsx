@@ -83,7 +83,7 @@ export function LobbiesView() {
         />
       </div>
 
-      <section className="grid items-start gap-5 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+      <section className="grid grid-cols-[minmax(0,1fr)] items-start gap-5 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
         <Tile
           cap={t("online.lobbies.cap", { count: rooms.length })}
           aside={

@@ -4,7 +4,7 @@ import { flashTitle } from "./title-flash";
 describe("flashTitle", () => {
   beforeEach(() => {
     vi.useFakeTimers();
-    document.title = "Онлайн · OnCue";
+    document.title = "Онлайн · Guessverse";
   });
   afterEach(() => vi.useRealTimers());
 
@@ -12,13 +12,13 @@ describe("flashTitle", () => {
     const stop = flashTitle("Соперник найден!", 1000);
     expect(document.title).toBe("Соперник найден!");
     vi.advanceTimersByTime(1000);
-    expect(document.title).toBe("Онлайн · OnCue");
+    expect(document.title).toBe("Онлайн · Guessverse");
     vi.advanceTimersByTime(1000);
     expect(document.title).toBe("Соперник найден!");
     stop();
-    expect(document.title).toBe("Онлайн · OnCue");
+    expect(document.title).toBe("Онлайн · Guessverse");
     vi.advanceTimersByTime(5000);
-    expect(document.title).toBe("Онлайн · OnCue");
+    expect(document.title).toBe("Онлайн · Guessverse");
   });
 
   it("prefers-reduced-motion: заголовок не мигает, stop возвращает исходный", () => {
@@ -32,7 +32,7 @@ describe("flashTitle", () => {
       vi.advanceTimersByTime(3000);
       expect(document.title).toBe("Соперник найден!");
       stop();
-      expect(document.title).toBe("Онлайн · OnCue");
+      expect(document.title).toBe("Онлайн · Guessverse");
     } finally {
       globalThis.matchMedia = original;
     }
@@ -42,6 +42,6 @@ describe("flashTitle", () => {
     const stop = flashTitle("x", 500);
     stop();
     stop();
-    expect(document.title).toBe("Онлайн · OnCue");
+    expect(document.title).toBe("Онлайн · Guessverse");
   });
 });

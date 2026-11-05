@@ -28,6 +28,7 @@ import { SectionCap } from "@/shared/ui/section-cap";
 import { cn } from "@/shared/lib/cn";
 import { useToast } from "@/shared/ui/toast";
 import { useIcons } from "@/shared/ui/theme-provider";
+import { useDocumentTitle } from "@/shared/lib/use-document-title";
 import { useDynamicT } from "@/shared/i18n/dynamic";
 import { useViewer } from "@/features/auth/session";
 import { CommentsSection } from "@/features/comments/CommentsSection";
@@ -123,6 +124,8 @@ function CollectionBody({
   const authorName = useAuthorName();
   const tagTitle = useTagTitle();
   const me = page.me ?? null;
+  // Вкладка называется по сборнику, а не общим «Сборник».
+  useDocumentTitle(t("meta.titleWithBrand", { title: detail.title }));
   const items = detail.items ?? null;
   const unit = t(`collections.row.items.${detail.domain}`, { count: detail.items_count });
   return (

@@ -82,7 +82,7 @@ describe("AvatarBlock: статус", () => {
       />,
     );
     const status = screen.getByTestId("avatar-status");
-    expect(status).toHaveTextContent("не прошла модерацию");
+    expect(status).toHaveTextContent("не прошёл модерацию");
     expect(status).not.toHaveTextContent("secret_code_42");
   });
 

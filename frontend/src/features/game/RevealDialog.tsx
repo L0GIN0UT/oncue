@@ -41,6 +41,7 @@ const HEAD = {
   partial: "bg-partial-fill text-ink",
   miss: "bg-rule text-ink",
   skip: "bg-rule text-ink",
+  gaveUp: "bg-rule text-ink",
   void: "bg-rule text-ink",
 } as const;
 
@@ -51,6 +52,15 @@ const KEYBOARD_GUARD_MS = 300;
 const wasSkipped = (round: RoundOut): boolean =>
   roundOutcome(round) === "miss" &&
   round.guesses.length > 0 &&
+  round.guesses.every((g) => g.kind === "skip");
+
+/**
+ * «Сдались»: раунд закончен промахом, а до последнего уровня игрок не дошёл — значит, нажал
+ * «Сдаться» (в контракте признака сдачи нет). Пропуск всех уровней до конца — это «Пропущено».
+ */
+const gaveUp = (round: RoundOut): boolean =>
+  roundOutcome(round) === "miss" &&
+  round.guesses.length < round.levels_count &&
   round.guesses.every((g) => g.kind === "skip");
 
 /** Тело по подаче итога (D12): ответ раунда или сделанный выбор. */
@@ -72,11 +82,13 @@ export function RevealDialog({
   const t = useTranslations();
   const outcome = roundOutcome(round);
   const skipped = wasSkipped(round);
-  const kind = skipped
-    ? "skip"
-    : outcome === "exact" || outcome === "partial" || outcome === "void"
-      ? outcome
-      : "miss";
+  const kind = gaveUp(round)
+    ? "gaveUp"
+    : skipped
+      ? "skip"
+      : outcome === "exact" || outcome === "partial" || outcome === "void"
+        ? outcome
+        : "miss";
   const choice = presentation === "bracket";
   const Body = bodies[presentation];
   const [openedAt] = useState(() => Date.now());
@@ -165,6 +177,7 @@ function AnswerBody({ sessionId, round, stats, domain }: BodyProps) {
   const outcome = roundOutcome(round);
   const scored = outcome === "exact" || outcome === "partial";
   const skipped = wasSkipped(round);
+  const surrendered = gaveUp(round);
   if (!reveal) {
     return (
       <div className="flex flex-col items-center gap-4 text-center">
@@ -195,26 +208,29 @@ function AnswerBody({ sessionId, round, stats, domain }: BodyProps) {
           <Metric value={reveal.metric} testId="reveal-metric" />
         )}
       </div>
-      <div className="grid w-full grid-cols-2 gap-2.5">
-        <StatTile
-          className="items-center"
-          value={
-            skipped
-              ? "—"
-              : t("game.reveal.attemptOf", {
-                  attempt: round.guesses.length,
-                  total: round.levels_count,
-                })
-          }
-          label={t("game.reveal.attempt")}
-        />
-        <StatTile
-          className={cn("items-center", scored && "border-partial-line")}
-          accent={scored}
-          value={t("game.reveal.points", { points: round.points ?? 0 })}
-          label={t("game.reveal.score")}
-        />
-      </div>
+      {/* После «Сдаться» попытка и очки не несут смысла: плитки не показываем. */}
+      {!surrendered && (
+        <div className="grid w-full grid-cols-2 gap-2.5">
+          <StatTile
+            className="items-center"
+            value={
+              skipped
+                ? "—"
+                : t("game.reveal.attemptOf", {
+                    attempt: round.guesses.length,
+                    total: round.levels_count,
+                  })
+            }
+            label={t("game.reveal.attempt")}
+          />
+          <StatTile
+            className={cn("items-center", scored && "border-partial-line")}
+            accent={scored}
+            value={t("game.reveal.points", { points: round.points ?? 0 })}
+            label={t("game.reveal.score")}
+          />
+        </div>
+      )}
       {stats && <AgreePct pct={stats.agree_pct} />}
     </>
   );

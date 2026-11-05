@@ -70,7 +70,7 @@ export function PlayerView({ userId }: { userId: string }) {
   if (page.data.restricted) {
     return (
       <div className="flex max-w-[640px] flex-col gap-5 pt-2" data-testid="player-restricted">
-        <PlayerHeader nickname={nickname} appearance={appearance} level={null} />
+        <PlayerHeader nickname={nickname} appearance={appearance} />
         <p className="max-w-[60ch] text-ink-muted">{t("social.player.restricted")}</p>
         {social?.blocked_by_me && <PlayerActions userId={userId} social={social} />}
       </div>
@@ -82,7 +82,7 @@ export function PlayerView({ userId }: { userId: string }) {
       data-testid="player"
     >
       <div className="flex min-w-0 flex-col gap-5">
-        <PlayerHeader nickname={nickname} appearance={appearance} level={data?.level ?? null} />
+        <PlayerHeader nickname={nickname} appearance={appearance} />
         {social && <PlayerActions userId={userId} social={social} />}
         {avatarAsset && (
           <div>
@@ -104,7 +104,11 @@ export function PlayerView({ userId }: { userId: string }) {
         <div className="flex min-w-0 flex-col gap-5">
           <Tile cap={t("progression.cols.stats")}>
             <div className="grid grid-cols-2 gap-2">
-              <StatTile accent value={data.level} label={t("progression.level.title")} />
+              <StatTile
+                accent
+                value={<span data-testid="player-level">{data.level}</span>}
+                label={t("progression.level.title")}
+              />
               <StatTile
                 value={<span data-testid="player-xp">{f.number(data.total_xp)}</span>}
                 label={t("progression.tiles.xp")}
@@ -139,17 +143,14 @@ export function PlayerView({ userId }: { userId: string }) {
   );
 }
 
-/** Шапка чужого профиля: аватар с рамкой, ник Unbounded, титул и уровень. */
+/** Шапка чужого профиля: аватар с рамкой, ник Unbounded и титул (уровень — в плитке статистики). */
 function PlayerHeader({
   nickname,
   appearance,
-  level,
 }: {
   nickname: string;
   appearance: AppearanceCard | null;
-  level: number | null;
 }) {
-  const t = useTranslations();
   const title = itemOf(appearance, "title");
   return (
     <ProfileBackdrop appearance={appearance} className="rounded-[var(--radius-ticket)]">
@@ -164,17 +165,13 @@ function PlayerHeader({
             >
               {nickname}
             </h1>
-            <p className="truncate text-sm text-ink-muted">
-              {title && (
+            {title && (
+              <p className="truncate text-sm text-ink-muted">
                 <span dir="auto" data-testid="player-title">
                   {title.title}
                 </span>
-              )}
-              {title && level != null && " · "}
-              {level != null && (
-                <span data-testid="player-level">{t("progression.level.value", { level })}</span>
-              )}
-            </p>
+              </p>
+            )}
           </div>
         </header>
       </Tile>

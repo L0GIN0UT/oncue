@@ -28,60 +28,76 @@ export function ResultRows({ summary, items, domain, levels }: PresenterProps) {
   const t = useTranslations();
   const format = useFormatter();
   const Icon = domain === "film" ? Film : Music;
+  // Подпись «Сохранить» — одна над списком, а на каждой из нескольких строк только значок.
+  const saveable = summary.rounds.filter((r) => r.media_item_id).length;
+  const compact = saveable > 1;
   return (
-    <ol className="flex flex-col gap-2.5" aria-label={t("results.roundsLabel")}>
-      {summary.rounds.map((r) => {
-        const item = r.media_item_id ? items.get(r.media_item_id) : undefined;
-        const seconds = r.level !== null ? levelSeconds(levels, r.level) : null;
-        const persons = item?.persons.map((p) => p.name).join(", ");
-        return (
-          <li
-            key={r.index}
-            data-testid="result-row"
-            className="flex flex-wrap items-center gap-x-3.5 gap-y-2 rounded-[14px] border-[1.5px] border-rule bg-stage px-3.5 py-3"
-          >
-            <Cover
-              ratio={domain === "film" ? "poster" : "square"}
-              src={null}
-              placeholder={<Icon className="size-5" aria-hidden />}
-              className="w-12 flex-none rounded-[10px]"
-            />
-            <div className="min-w-0 flex-1 basis-40">
-              <p dir="auto" className="truncate text-base font-semibold">
-                {item?.title ?? t("results.unknownItem")}
-              </p>
-              <p className="truncate text-[13px] text-ink-muted">
-                {[persons, item?.year].filter(Boolean).join(" · ")}
-                {r.exact_pct !== null && r.exact_pct !== undefined && (
-                  <>
-                    {persons || item?.year ? " · " : ""}
-                    {t("results.exactPct", { pct: Math.round(r.exact_pct) })}
-                  </>
-                )}
-              </p>
-            </div>
-            <span className="text-[13px] text-ink-muted">
-              {seconds !== null && r.outcome !== "void"
-                ? t("results.opened", {
-                    seconds: format.number(seconds, { maximumFractionDigits: 1 }),
-                  })
-                : t(`results.outcome.${r.outcome}`, { level: r.level ?? 0 })}
-            </span>
-            <span
-              className={cn(
-                "tabular min-w-16 text-right font-display text-lg font-extrabold",
-                POINTS_TONE[r.outcome],
-              )}
+    <>
+      {compact && (
+        <p className="text-right text-xs text-ink-faint" data-testid="results-save-hint">
+          {t("library.save.hint")}
+        </p>
+      )}
+      <ol className="flex flex-col gap-2.5" aria-label={t("results.roundsLabel")}>
+        {summary.rounds.map((r) => {
+          const item = r.media_item_id ? items.get(r.media_item_id) : undefined;
+          const seconds = r.level !== null ? levelSeconds(levels, r.level) : null;
+          const persons = item?.persons.map((p) => p.name).join(", ");
+          return (
+            <li
+              key={r.index}
+              data-testid="result-row"
+              className="flex flex-wrap items-center gap-x-3.5 gap-y-2 rounded-[14px] border-[1.5px] border-rule bg-stage px-3.5 py-3"
             >
-              {r.points > 0 ? `+${r.points}` : r.points}
-            </span>
-            {r.media_item_id && (
-              <SaveButton mediaItemId={r.media_item_id} domain={item?.domain} source="results" />
-            )}
-          </li>
-        );
-      })}
-    </ol>
+              <Cover
+                ratio={domain === "film" ? "poster" : "square"}
+                src={null}
+                placeholder={<Icon className="size-5" aria-hidden />}
+                className="w-12 flex-none rounded-[10px]"
+              />
+              <div className="min-w-0 flex-1 basis-40">
+                <p dir="auto" className="truncate text-base font-semibold">
+                  {item?.title ?? t("results.unknownItem")}
+                </p>
+                <p className="truncate text-[13px] text-ink-muted">
+                  {[persons, item?.year].filter(Boolean).join(" · ")}
+                  {r.exact_pct !== null && r.exact_pct !== undefined && (
+                    <>
+                      {persons || item?.year ? " · " : ""}
+                      {t("results.exactPct", { pct: Math.round(r.exact_pct) })}
+                    </>
+                  )}
+                </p>
+              </div>
+              <span className="text-[13px] text-ink-muted">
+                {seconds !== null && r.outcome !== "void"
+                  ? t("results.opened", {
+                      seconds: format.number(seconds, { maximumFractionDigits: 1 }),
+                    })
+                  : t(`results.outcome.${r.outcome}`, { level: r.level ?? 0 })}
+              </span>
+              <span
+                className={cn(
+                  "tabular min-w-16 text-right font-display text-lg font-extrabold",
+                  POINTS_TONE[r.outcome],
+                )}
+              >
+                {r.points > 0 ? `+${r.points}` : r.points}
+              </span>
+              {r.media_item_id && (
+                <SaveButton
+                  mediaItemId={r.media_item_id}
+                  domain={item?.domain}
+                  source="results"
+                  compact={compact}
+                  itemTitle={item?.title}
+                />
+              )}
+            </li>
+          );
+        })}
+      </ol>
+    </>
   );
 }
 

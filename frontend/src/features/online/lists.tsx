@@ -15,7 +15,7 @@ import { useDynamicT } from "@/shared/i18n/dynamic";
 import { cn } from "@/shared/lib/cn";
 import { Avatar } from "@/shared/ui/avatar";
 import { ListRow } from "@/shared/ui/list-row";
-import { ReportButton } from "@/features/reports/ReportDialog";
+import { ReportPlayerMenu } from "@/features/reports/ReportPlayerMenu";
 
 export function useModeTitle() {
   const t = useTranslations();
@@ -133,18 +133,17 @@ export function MyMatchList({ matches }: { matches: HistoryCard[] }) {
                   <span dir="auto" className="text-ink-muted">
                     {p.nickname}
                   </span>
-                  {p.can_report && (
-                    <ReportButton
-                      kind="player"
-                      targetId={p.user_id}
-                      contextMatchId={m.match_id}
-                      label={t("match.rate.report")}
-                      ariaLabel={t("social.report.playerLabel", { name: p.nickname })}
-                      testId={`history-report-${p.nickname}`}
-                    />
-                  )}
                 </li>
               ))}
+              {m.participants.some((p) => p.can_report) && (
+                <li className="flex items-center">
+                  <ReportPlayerMenu
+                    matchId={m.match_id}
+                    players={m.participants.filter((p) => p.can_report)}
+                    testId={`history-report-menu-${m.match_id}`}
+                  />
+                </li>
+              )}
             </ul>
           )}
         </li>

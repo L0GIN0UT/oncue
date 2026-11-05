@@ -1,5 +1,6 @@
 "use client";
 /** Блокировки (список, разблокировать) и настройки приватности (PUT заменяет целиком). */
+import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useFormatter, useTranslations } from "next-intl";
 import type { PrivacySettings } from "@/shared/api/types";
@@ -78,6 +79,8 @@ export function PrivacyPanel() {
   const client = useQueryClient();
   const action = useSocialAction();
   const query = useQuery({ queryKey: friendsKeys.privacy, queryFn: fetchPrivacy });
+  // Сохраняется само, без кнопки: после ответа сервера показываем «Сохранено».
+  const [saved, setSaved] = useState(false);
 
   if (query.isPending)
     return (
@@ -96,9 +99,11 @@ export function PrivacyPanel() {
   const update = async (patch: Partial<PrivacySettings>) => {
     const next = { ...settings, ...patch };
     // Оптимистично: управляемый чекбокс переключается сразу, при отказе возвращаем прежнее.
+    setSaved(false);
     client.setQueryData(friendsKeys.privacy, next);
     const r = await action.run("privacy", () => savePrivacy(next));
     client.setQueryData(friendsKeys.privacy, r.ok ? r.value : settings);
+    setSaved(r.ok);
   };
 
   return (
@@ -115,7 +120,9 @@ export function PrivacyPanel() {
         />
         <span className="flex flex-col">
           <span className="font-medium">{t("social.privacy.profile")}</span>
-          <span className="text-sm text-ink-muted">{t("social.privacy.profileHint")}</span>
+          <span className="text-sm text-ink-muted" data-testid="privacy-profile-hint">
+            {t(settings.profile_public ? "social.privacy.profileOn" : "social.privacy.profileOff")}
+          </span>
         </span>
       </label>
       <label className="flex items-start gap-3">
@@ -150,6 +157,13 @@ export function PrivacyPanel() {
         ))}
       </fieldset>
       <p className="text-sm text-ink-faint">{t("social.privacy.history")}</p>
+      <p
+        role="status"
+        className="min-h-5 text-sm text-exact"
+        data-testid={saved ? "privacy-saved" : undefined}
+      >
+        {saved ? t("social.privacy.saved") : ""}
+      </p>
       <ErrorLine text={action.error} />
     </div>
   );

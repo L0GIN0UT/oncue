@@ -38,7 +38,7 @@ describe("buildShareText — сессия по сборнику (этап 3b)", 
   });
 
   it("текст сервера со ссылкой на главную дополняется ссылкой на сборник", () => {
-    const text = buildShareText(summary({ share_text: "OnCue 14/30\nhttps://o.example/" }), {
+    const text = buildShareText(summary({ share_text: "Guessverse 14/30\nhttps://o.example/" }), {
       ...ctx("x", "https://o.example/"),
       collection,
     });
@@ -55,11 +55,11 @@ describe("buildShareText", () => {
   });
 
   it("берёт текст сервера и не дублирует ссылку", () => {
-    const withLink = summary({ share_text: "OnCue 14/30\n🟩🟨\nhttps://oncue.example/" });
+    const withLink = summary({ share_text: "Guessverse 14/30\n🟩🟨\nhttps://oncue.example/" });
     expect(buildShareText(withLink, ctx("x", "https://oncue.example/"))).toBe(withLink.share_text);
     expect(
-      buildShareText(summary({ share_text: "OnCue 14/30" }), ctx("x", "https://o.example/")),
-    ).toBe("OnCue 14/30\nhttps://o.example/");
+      buildShareText(summary({ share_text: "Guessverse 14/30" }), ctx("x", "https://o.example/")),
+    ).toBe("Guessverse 14/30\nhttps://o.example/");
   });
 });
 
@@ -69,7 +69,7 @@ describe("buildShareText по presentation", () => {
       presentation: "streak",
       score: 7,
       max_score: 7,
-      share_text: "OnCue film.pair.rating\n7/7\n🟩",
+      share_text: "Guessverse film.pair.rating\n7/7\n🟩",
       record: { best: 7, is_new: true, percentile: 91 },
       rounds: [
         { index: 0, outcome: "exact", level: 1, points: 1, media_item_id: null },
@@ -101,9 +101,9 @@ describe("buildShareText по presentation", () => {
   });
 
   it("сетка без чемпиона — как сумма очков", () => {
-    const bracket = summary({ presentation: "bracket", bracket: null, share_text: "OnCue" });
+    const bracket = summary({ presentation: "bracket", bracket: null, share_text: "Guessverse" });
     expect(buildShareText(bracket, ctx("x", "https://o.example/"))).toBe(
-      "OnCue\nhttps://o.example/",
+      "Guessverse\nhttps://o.example/",
     );
   });
 });

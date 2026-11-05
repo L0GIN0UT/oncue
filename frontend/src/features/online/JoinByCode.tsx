@@ -50,7 +50,7 @@ export function JoinByCode() {
           autoCapitalize="characters"
           spellCheck={false}
           inputMode="text"
-          placeholder="K7MQ2XWP"
+          placeholder={t("online.join.placeholder")}
           aria-describedby={`${id}-hint${error ? ` ${id}-error` : ""}`}
           aria-invalid={error}
           className="tabular min-w-0 flex-1 bg-transparent font-display text-sm font-extrabold tracking-[0.08em] text-ink-soft uppercase outline-none placeholder:text-ink-faint"

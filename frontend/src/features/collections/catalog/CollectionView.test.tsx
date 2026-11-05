@@ -123,3 +123,26 @@ describe("CollectionView", () => {
     expect(await screen.findByText("Такого сборника нет")).toBeInTheDocument();
   });
 });
+
+describe("CollectionView: подписи", () => {
+  it("сложность, которой ещё нет, названа прямо: «сложность не оценена»", async () => {
+    signInAsUser();
+    const c = world.ugc.collections.find((x) => x.plays < 10)!;
+    renderWithProviders(<CollectionView collectionId={c.id} />);
+    expect(await screen.findByTestId("collection-stats")).toHaveTextContent("сложность не оценена");
+    expect(screen.getByTestId("collection-stats")).not.toHaveTextContent("ещё не известна");
+  });
+});
+
+describe("CollectionView: заголовок вкладки", () => {
+  it("вкладка называется по сборнику, а на уходе возвращается прежний заголовок", async () => {
+    signInAsUser();
+    document.title = "Сборники · Guessverse";
+    const c = world.ugc.collections[1]!;
+    const { unmount } = renderWithProviders(<CollectionView collectionId={c.id} />);
+    await screen.findByTestId("collection-like");
+    await waitFor(() => expect(document.title).toBe(`${c.title} · Guessverse`));
+    unmount();
+    expect(document.title).toBe("Сборники · Guessverse");
+  });
+});

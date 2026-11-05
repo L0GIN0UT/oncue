@@ -14,7 +14,11 @@ describe("PlayerView", () => {
     signInAsUser();
     renderWithProviders(<PlayerView userId={PLAYER.user_id} />);
 
-    expect(await screen.findByTestId("player-level")).toHaveTextContent("Уровень 12");
+    // Уровень назван один раз — в плитке со статистикой; в шапке рядом с ником его нет.
+    expect(await screen.findByTestId("player-level")).toHaveTextContent("12");
+    expect(screen.getAllByTestId("player-level")).toHaveLength(1);
+    expect(screen.queryByText("Уровень 12")).not.toBeInTheDocument();
+    expect(screen.getByTestId("player-badge")).not.toHaveTextContent("Уровень");
     expect(screen.getByTestId("player-xp")).toHaveTextContent("7");
     expect(screen.getByTestId("player-badge-first_win")).toHaveTextContent("Первая победа");
     expect(screen.getByTestId("player-badge-streak_7")).toHaveTextContent("Неделя подряд");
@@ -52,7 +56,7 @@ describe("PlayerView", () => {
     signInAsUser();
     renderWithProviders(<PlayerView userId={PLAYER.user_id} />);
     const button = await screen.findByTestId("report-avatar");
-    expect(button).toHaveAccessibleName("Пожаловаться на аватарку игрока: Мастер");
+    expect(button).toHaveAccessibleName("Пожаловаться на аватар игрока: Мастер");
   });
 
   it("нет такого игрока — понятное сообщение", async () => {

@@ -18,6 +18,7 @@ import { AddFriendPanel } from "./AddFriendPanel";
 import { PrivacyPanel, BlocksPanel } from "./PrivacyBlocks";
 import { ErrorLine } from "./ErrorLine";
 import { StatusDot } from "./StatusDot";
+import { setUrlParam } from "@/shared/lib/url-state";
 import type { TabId } from "./tabs";
 import { FRIENDS_REFRESH_MS } from "./config";
 import { useSocialAction } from "./use-action";
@@ -79,7 +80,11 @@ export function FriendsView({ initialTab = "friends" }: { initialTab?: TabId }) 
       <Tabs
         tabs={tabs}
         value={tab}
-        onChange={setTab}
+        onChange={(next) => {
+          setTab(next);
+          // Вкладка — часть адреса: после перезагрузки и по ссылке открывается она же.
+          setUrlParam("tab", next === "friends" ? null : next);
+        }}
         idBase="friends"
         aria-label={t("social.tabs.label")}
       />

@@ -84,6 +84,19 @@ describe("FriendsView: заявки", () => {
   });
 });
 
+describe("FriendsView: вкладка в адресе", () => {
+  it("выбор вкладки пишет ?tab= в адрес, «Друзья» его убирает", async () => {
+    window.history.replaceState(null, "", "/friends");
+    await open();
+    await userEvent.click(await screen.findByTestId("friends-tab-requests"));
+    expect(window.location.search).toBe("?tab=requests");
+    await userEvent.click(screen.getByTestId("friends-tab-blocks"));
+    expect(window.location.search).toBe("?tab=blocks");
+    await userEvent.click(screen.getByTestId("friends-tab-friends"));
+    expect(window.location.search).toBe("");
+  });
+});
+
 describe("FriendsView: добавить и код", () => {
   it("заявка по нику уходит с Idempotency-Key; подтверждение с ником", async () => {
     const keys: (string | null)[] = [];
@@ -98,6 +111,20 @@ describe("FriendsView: добавить и код", () => {
     expect(keys).toHaveLength(1);
     expect(keys[0]).toMatch(/^[0-9a-f-]{36}$/);
     expect(world.social.outgoing).toHaveLength(1);
+  });
+
+  it("кнопки не дублируют друг друга, а неактивная говорит почему", async () => {
+    await open("add");
+    const byNick = await screen.findByRole("button", { name: "Отправить заявку по нику" });
+    const byCode = screen.getByRole("button", { name: "Отправить заявку по коду" });
+    expect(byNick).toBeDisabled();
+    expect(byCode).toBeDisabled();
+    expect(byNick).toHaveAccessibleDescription("Введите ник игрока");
+    expect(byCode).toHaveAccessibleDescription("Введите код друга");
+    await userEvent.type(screen.getByTestId("add-nickname"), "Дмитрий");
+    expect(byNick).toBeEnabled();
+    expect(screen.queryByText("Введите ник игрока")).not.toBeInTheDocument();
+    expect(byCode).toBeDisabled();
   });
 
   it("неизвестный ник — 404 без раскрытия причины", async () => {
@@ -154,6 +181,34 @@ describe("FriendsView: блокировки и приватность", () => {
     await userEvent.click(screen.getByTestId("privacy-requests-none"));
     await waitFor(() => expect(world.social.privacy.friend_requests).toBe("none"));
     expect(screen.getByTestId("privacy-requests-none")).toBeChecked();
+  });
+
+  it("подпись профиля описывает текущее состояние, а сохранение подтверждается", async () => {
+    await open("privacy");
+    const box = await screen.findByTestId("privacy-profile");
+    // Включено: подпись говорит про открытый профиль, а не про выключенный.
+    expect(box).toBeChecked();
+    expect(screen.getByTestId("privacy-profile-hint")).toHaveTextContent("Профиль открыт");
+    expect(screen.queryByTestId("privacy-saved")).not.toBeInTheDocument();
+    await userEvent.click(box);
+    expect(await screen.findByTestId("privacy-saved")).toHaveTextContent("Сохранено");
+    expect(screen.getByTestId("privacy-profile-hint")).toHaveTextContent("Профиль закрыт");
+    // Следующее изменение гасит прежнее подтверждение до нового ответа сервера.
+    await userEvent.click(screen.getByTestId("privacy-requests-none"));
+    await waitFor(() => expect(world.social.privacy.friend_requests).toBe("none"));
+    expect(await screen.findByTestId("privacy-saved")).toBeInTheDocument();
+  });
+
+  it("при отказе сервера «Сохранено» не показывается", async () => {
+    server.use(
+      http.put("*/api/social/v1/me/privacy", () =>
+        HttpResponse.json({ code: "social.unavailable", title: "x", status: 503 }, { status: 503 }),
+      ),
+    );
+    await open("privacy");
+    await userEvent.click(await screen.findByTestId("privacy-profile"));
+    expect(await screen.findByTestId("social-error")).toBeInTheDocument();
+    expect(screen.queryByTestId("privacy-saved")).not.toBeInTheDocument();
   });
 
   it("переключатель меняется сразу, при отказе сервера возвращается", async () => {

@@ -169,6 +169,7 @@ test("дуэль: лобби → готовность → матч → «Соп�
 
   // История в хабе: жалоба на игрока матча (bff отдаёт participants, ADR 0069).
   await page.goto("/online");
+  await page.locator("[data-testid^=history-report-menu-]").first().click();
   await expect(page.getByTestId("history-report-rival").first()).toBeVisible();
 });
 

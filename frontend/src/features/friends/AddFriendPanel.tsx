@@ -54,10 +54,17 @@ export function AddFriendPanel() {
           <Button
             type="submit"
             disabled={action.busy || !nickname.trim()}
+            aria-describedby={nickname.trim() ? undefined : "add-nick-need"}
             data-testid="add-nickname-submit"
           >
-            {t("social.add.send")}
+            {t("social.add.sendByNickname")}
           </Button>
+          {/* Неактивная кнопка объясняет, чего ей не хватает. */}
+          {!nickname.trim() && (
+            <p id="add-nick-need" className="text-xs text-ink-muted">
+              {t("social.add.needNickname")}
+            </p>
+          )}
         </form>
       </section>
       <section aria-labelledby="add-code" className="flex max-w-md flex-col gap-3">
@@ -77,10 +84,16 @@ export function AddFriendPanel() {
           <Button
             type="submit"
             disabled={action.busy || !code.trim()}
+            aria-describedby={code.trim() ? undefined : "add-code-need"}
             data-testid="add-code-submit"
           >
-            {t("social.add.send")}
+            {t("social.add.sendByCode")}
           </Button>
+          {!code.trim() && (
+            <p id="add-code-need" className="text-xs text-ink-muted">
+              {t("social.add.needCode")}
+            </p>
+          )}
         </form>
       </section>
       {sent && (

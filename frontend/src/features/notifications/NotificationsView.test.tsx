@@ -41,11 +41,11 @@ describe("NotificationsView", () => {
     expect(screen.getByTestId("notification-item")).toHaveTextContent("<script>alert(1)</script>");
   });
 
-  it("«Прочитано» отмечает одно уведомление", async () => {
+  it("«Отметить прочитанным» отмечает одно уведомление", async () => {
     signInAsUser();
     renderWithProviders(<NotificationsView />);
     const first = (await screen.findAllByTestId("notification-item"))[0]!;
-    await userEvent.click(within(first).getByRole("button", { name: /Прочитано/ }));
+    await userEvent.click(within(first).getByRole("button", { name: /Отметить прочитанным/ }));
     await waitFor(() =>
       expect(screen.getAllByTestId("notification-item")[0]).toHaveAttribute("data-read", "true"),
     );
@@ -114,7 +114,7 @@ describe("NotificationsView", () => {
     );
     renderWithProviders(<NotificationsView />);
     const first = (await screen.findAllByTestId("notification-item"))[0]!;
-    await userEvent.click(within(first).getByRole("button", { name: /Прочитано/ }));
+    await userEvent.click(within(first).getByRole("button", { name: /Отметить прочитанным/ }));
     expect(await screen.findByTestId("notifications-action-error")).toBeInTheDocument();
     expect(screen.getAllByTestId("notification-item")[0]).toHaveAttribute("data-read", "false");
   });

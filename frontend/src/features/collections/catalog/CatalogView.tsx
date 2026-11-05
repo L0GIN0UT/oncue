@@ -115,7 +115,7 @@ export function CatalogView({ openId = null }: { openId?: string | null }) {
         <FilterBar filters={filters} onChange={update} />
       </div>
 
-      <div className="grid items-start gap-5 lg:grid-cols-[260px_minmax(0,1fr)]">
+      <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-5 lg:grid-cols-[260px_minmax(0,1fr)]">
         <aside className="flex flex-col gap-5">
           <MineTile isUser={viewer.kind === "user"} />
           <TogetherTile />

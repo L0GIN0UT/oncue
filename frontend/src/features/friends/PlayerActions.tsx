@@ -114,31 +114,37 @@ export function PlayerActions({ userId, social }: { userId: string; social: Play
             {!social.is_friend && !incoming && !requests.isPending && social.can_send_request && (
               <AddFriendButton userId={userId} testId="player-add-friend" />
             )}
-            {confirmBlock ? (
-              <span className="flex items-center gap-2">
+            {/* Блокировка — отдельная группа со своей чертой слева, а не вплотную к «Удалить». */}
+            <span
+              className="ml-auto flex items-center gap-2 border-l border-rule pl-3"
+              data-testid="player-danger"
+            >
+              {confirmBlock ? (
+                <span className="flex items-center gap-2">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={action.busy}
+                    onClick={() => void run("block", () => blockPlayer(userId))}
+                    data-testid="player-block-confirm"
+                  >
+                    {t("social.player.blockConfirm")}
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={() => setConfirmBlock(false)}>
+                    {t("social.cancel")}
+                  </Button>
+                </span>
+              ) : (
                 <Button
-                  variant="secondary"
+                  variant="ghost"
                   size="sm"
-                  disabled={action.busy}
-                  onClick={() => void run("block", () => blockPlayer(userId))}
-                  data-testid="player-block-confirm"
+                  onClick={() => setConfirmBlock(true)}
+                  data-testid="player-block"
                 >
-                  {t("social.player.blockConfirm")}
+                  {t("social.player.block")}
                 </Button>
-                <Button variant="ghost" size="sm" onClick={() => setConfirmBlock(false)}>
-                  {t("social.cancel")}
-                </Button>
-              </span>
-            ) : (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setConfirmBlock(true)}
-                data-testid="player-block"
-              >
-                {t("social.player.block")}
-              </Button>
-            )}
+              )}
+            </span>
           </>
         )}
       </div>
