@@ -52,7 +52,10 @@
       "dedup_key": "quest:{payload.user_id}:{payload.quest_key}:{payload.period_start}",
       "key": "quest_completed",
       "params": {
-        "quest": "payload.quest_key"
+        "quest": [
+          "payload.quest_title",
+          "payload.quest_key"
+        ]
       },
       "recipient": "payload.user_id",
       "source_event": "progression.QuestCompleted",

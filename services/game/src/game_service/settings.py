@@ -56,7 +56,7 @@ class GameSettings(BaseModel):
     reveal_link_margin_s: float = Field(default=10.0, ge=0)
     reveal_cache_size: int = Field(default=10000, ge=100)
     # Подпись в тексте «Поделиться» (название продукта).
-    share_title: str = Field(default="OnCue", max_length=40)
+    share_title: str = Field(default="Guessverse", max_length=40)
     # Сколько кандидатов пула запрашивать у проекции за раз (этап 2 — весь пул).
     candidate_limit: int = Field(default=5000, ge=1, le=100000)
     # Окно, на сколько дней вперёд админ видит наборы, ограничено для GET /admin/v1/daily-sets.

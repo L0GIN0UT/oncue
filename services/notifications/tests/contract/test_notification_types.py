@@ -61,8 +61,9 @@ def test_every_source_event_exists_and_its_fields_are_in_the_schema() -> None:
             assert _payload_field(item["recipient"]) in fields, item["key"]
         for path in item.get("data", {}).values():
             assert _payload_field(path) in fields, (item["key"], path)
-        for path in item["params"].values():
-            assert _payload_field(path) in fields, (item["key"], path)
+        for value in item["params"].values():
+            for path in [value] if isinstance(value, str) else value:
+                assert _payload_field(path) in fields, (item["key"], path)
         for lookup in item.get("lookups", {}).values():
             assert _payload_field(lookup["path"]) in fields, (item["key"], lookup["path"])
         assert set(item.get("filter", {})) <= fields, item["key"]

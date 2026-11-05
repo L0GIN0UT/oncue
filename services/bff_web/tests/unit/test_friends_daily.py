@@ -317,7 +317,7 @@ def daily_result(score: int = 20, *, daily: bool = True, day: date | None = DAY)
         score=score,
         max_score=30,
         rounds=[],
-        share=Share("OnCue"),
+        share=Share("Guessverse"),
         mode_key=MUSIC,
         domain="music",
         day=day,

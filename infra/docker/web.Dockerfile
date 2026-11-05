@@ -1,4 +1,4 @@
-# Веб-клиент OnCue (Next.js, output: standalone). Контекст сборки — каталог frontend/:
+# Веб-клиент Guessverse (Next.js, output: standalone). Контекст сборки — каталог frontend/:
 #   docker build -f infra/docker/web.Dockerfile frontend
 # Типы API (src/shared/api/schema) закоммичены и сверяются в CI (`pnpm gen:api:check`),
 # поэтому контракты в контекст не нужны.

@@ -13,6 +13,7 @@
     "period": "daily",
     "period_start": "2026-10-23",
     "quest_key": "play_3_solo",
+    "quest_title": "Сыграть 3 раунда",
     "reward": {
       "verses": 5,
       "xp": 30

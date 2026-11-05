@@ -133,11 +133,24 @@
           },
           "params": {
             "additionalProperties": {
-              "maxLength": 120,
-              "pattern": "^[a-z_][a-z0-9_.]*$",
-              "type": "string"
+              "oneOf": [
+                {
+                  "maxLength": 120,
+                  "pattern": "^[a-z_][a-z0-9_.]*$",
+                  "type": "string"
+                },
+                {
+                  "items": {
+                    "maxLength": 120,
+                    "pattern": "^[a-z_][a-z0-9_.]*$",
+                    "type": "string"
+                  },
+                  "minItems": 1,
+                  "type": "array"
+                }
+              ]
             },
-            "description": "Подстановки шаблона: имя -> путь в событии (payload.level)",
+            "description": "Подстановки шаблона: имя -> путь в событии (payload.level) или массив путей: берётся первый непустой (откат для необязательных полей)",
             "type": "object"
           },
           "recipient": {

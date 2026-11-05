@@ -230,3 +230,28 @@ async def test_realtime_is_not_published_when_transaction_rolls_back(
     await svc.container.dispatcher.drain()
     assert svc.realtime.published == []
     assert await svc.count(notifications_table) == 0
+
+
+async def _quest_notification_body(svc: Any, **payload: Any) -> str:
+    user = uuid7()
+    base = {"user_id": str(user), "quest_key": "week_daily_3", **payload}
+    envelope = svc.event("progression.QuestCompleted", **base)
+    if "quest_title" not in payload:  # старое событие: поля нет вовсе
+        envelope = envelope.model_copy(
+            update={"payload": {k: v for k, v in envelope.payload.items() if k != "quest_title"}}
+        )
+    assert await svc.deliver(envelope) is Outcome.PROCESSED
+    [row] = await svc.rows(notifications_table, N.user_id == user)
+    return str(row.body)
+
+
+async def test_quest_notification_shows_readable_title(notifications: Service) -> None:
+    body = await _quest_notification_body(notifications, quest_title="Три дейлика")
+    assert body == "Задание «Три дейлика» выполнено, награда начислена."
+
+
+async def test_quest_notification_without_title_falls_back_to_key(
+    notifications: Service,
+) -> None:
+    body = await _quest_notification_body(notifications)
+    assert body == "Задание «week_daily_3» выполнено, награда начислена."

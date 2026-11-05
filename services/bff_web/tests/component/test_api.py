@@ -78,7 +78,7 @@ DAILY = [
 RESULT = {
     "score": 6,
     "max_score": 12,
-    "share": {"text": "OnCue 🟩⬛"},
+    "share": {"text": "Guessverse 🟩⬛"},
     "daily_stats": [{"index": 0, "exact_pct": 42.5}],
     "rounds": [
         {
@@ -202,7 +202,7 @@ RECORDS = [
 RESULT_BRACKET = {
     "score": 0,
     "max_score": 0,
-    "share": {"text": "OnCue Топ-32: Брат 🏆"},
+    "share": {"text": "Guessverse Топ-32: Брат 🏆"},
     "daily_stats": None,
     "presentation": "bracket",
     "record": None,
@@ -703,7 +703,7 @@ async def test_results_page_joins_catalog_and_caches_card(bff: Bff) -> None:
     assert first.headers["cache-control"] == PRIVATE
     blocks = first.json()["blocks"]
     assert blocks["result"]["data"]["score"] == 6
-    assert blocks["result"]["data"]["share_text"] == "OnCue 🟩⬛"
+    assert blocks["result"]["data"]["share_text"] == "Guessverse 🟩⬛"
     assert [(r["media_item_id"], r["exact_pct"]) for r in blocks["result"]["data"]["rounds"]] == [
         (str(ITEM), 42.5),
         (None, None),
