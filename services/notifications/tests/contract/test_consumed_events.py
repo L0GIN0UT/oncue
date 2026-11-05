@@ -42,7 +42,8 @@ def test_builtin_types_cover_the_contract_example_types() -> None:
         assert dict(notification_type.data) == item.get("data", {})
         assert notification_type.dedup_key == item["dedup_key"]
         assert dict(notification_type.filter) == item.get("filter", {})
-        assert dict(notification_type.params) == item["params"]
+        expected = {k: [v] if isinstance(v, str) else v for k, v in item["params"].items()}
+        assert {k: list(v) for k, v in notification_type.params.items()} == expected
         assert notification_type.user_mutable == item["user_mutable"]
 
 

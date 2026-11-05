@@ -71,7 +71,8 @@ class NotificationType:
         channels: Каналы по умолчанию.
         user_mutable: Игрок может отключить тип.
         dedup_key: Шаблон ключа дедупликации из полей payload (не ``event_id``).
-        params: Подстановки шаблона: имя -> путь в событии.
+        params: Подстановки шаблона: имя -> пути в событии; берётся первый непустой
+            (остальные - откат для необязательных полей).
         templates: Шаблоны по локали.
         filter: Условие равенства по полям payload.
         admin_switchable: Админ может выключить тип для всех (по умолчанию = ``user_mutable``).
@@ -83,7 +84,7 @@ class NotificationType:
     channels: Channels
     user_mutable: bool
     dedup_key: str
-    params: Mapping[str, str]
+    params: Mapping[str, tuple[str, ...]]
     templates: Mapping[str, Template]
     filter: Mapping[str, FilterValue] = field(default_factory=dict)
     lookups: Mapping[str, Lookup] = field(default_factory=dict)
@@ -100,7 +101,7 @@ def _require_payload_path(type_key: str, field_name: str, path: str) -> None:
 
 
 def _parse_lookups(
-    key: str, raw: Mapping[str, Any], params: Mapping[str, str], default_locale: str
+    key: str, raw: Mapping[str, Any], params: Mapping[str, Any], default_locale: str
 ) -> dict[str, Lookup]:
     lookups: dict[str, Lookup] = {}
     for name, item in raw.items():
@@ -118,6 +119,17 @@ def _parse_lookups(
     return lookups
 
 
+def _parse_params(key: str, raw: Mapping[str, Any]) -> dict[str, tuple[str, ...]]:
+    """Подстановки: строка - один путь, массив - пути по приоритету (первый непустой)."""
+    params: dict[str, tuple[str, ...]] = {}
+    for name, value in raw.items():
+        paths = (value,) if isinstance(value, str) else tuple(value)
+        for path in paths:
+            _require_payload_path(key, f"params.{name}", path)
+        params[name] = paths
+    return params
+
+
 def _parse_type(raw: Mapping[str, Any], default_locale: str) -> NotificationType:
     key = str(raw["key"])
     recipient = raw.get("recipient")
@@ -128,9 +140,7 @@ def _parse_type(raw: Mapping[str, Any], default_locale: str) -> NotificationType
         _require_payload_path(key, "recipient", recipient)
     if audience is not None and audience not in AUDIENCES:
         raise ConfigError(f"{key}: неизвестная audience `{audience}`")
-    params: dict[str, str] = dict(raw["params"])
-    for name, path in params.items():
-        _require_payload_path(key, f"params.{name}", path)
+    params = _parse_params(key, raw["params"])
     data: dict[str, str] = dict(raw.get("data", {}))
     for name, path in data.items():
         _require_payload_path(key, f"data.{name}", path)

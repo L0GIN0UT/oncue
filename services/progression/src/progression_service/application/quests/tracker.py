@@ -305,6 +305,7 @@ class ProgressTracker:
                 aggregate_id=str(user_id),
                 user_id=user_id,
                 quest_key=snap.key,
+                quest_title=snap.title,
                 period=snap.period,
                 period_start=event_start.isoformat(),
                 reward=RewardPayload(xp=snap.reward.xp, verses=snap.reward.verses),

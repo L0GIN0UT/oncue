@@ -120,6 +120,8 @@ class QuestCompleted(DomainEvent):
     reward: RewardPayload
     config_version: int
     at: datetime
+    quest_title: str | None = None
+    """Название задания из конфига (для текстов уведомлений); необязательное поле контракта."""
 
 
 @dataclass(frozen=True, kw_only=True)

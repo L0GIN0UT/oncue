@@ -243,3 +243,36 @@ def test_lookup_uses_requested_locale_when_it_has_text() -> None:
     assert map_event(t, payload, locale="en", default_locale="ru").body == "Here hey."
     other = {**payload, "code": "q"}
     assert map_event(t, other, locale="en", default_locale="ru").body == "Here nothing."
+
+
+def _quest_payload(**extra: Any) -> dict[str, Any]:
+    payload = payload_of("QuestCompleted")
+    payload.pop("quest_title", None)
+    return {**payload, "quest_key": "week_daily_3", **extra}
+
+
+@pytest.mark.parametrize(
+    ("extra", "expected"),
+    [
+        ({"quest_title": "Три дейлика"}, "Три дейлика"),  # новое событие: читаемое название
+        ({}, "week_daily_3"),  # старое событие без поля: ключ
+        ({"quest_title": None}, "week_daily_3"),  # null в событии: ключ
+        ({"quest_title": ""}, "week_daily_3"),  # пустая строка: ключ
+    ],
+)
+def test_quest_completed_uses_title_and_falls_back_to_key(
+    catalog: TypeCatalog, extra: dict[str, Any], expected: str
+) -> None:
+    t = catalog.by_key("quest_completed")
+    assert t is not None
+    candidate = map_event(t, _quest_payload(**extra), locale="ru", default_locale="ru")
+    assert candidate.body == f"Задание «{expected}» выполнено, награда начислена."
+
+
+def test_param_without_any_field_is_mapping_error(catalog: TypeCatalog) -> None:
+    t = catalog.by_key("quest_completed")
+    assert t is not None
+    payload = _quest_payload()
+    payload.pop("quest_key")
+    with pytest.raises(MappingError):
+        map_event(t, payload, locale="ru", default_locale="ru")

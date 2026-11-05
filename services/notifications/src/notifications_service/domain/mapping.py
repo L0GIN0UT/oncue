@@ -44,6 +44,25 @@ def resolve_path(payload: Mapping[str, Any], path: str) -> Any:  # Any: знач
     return current
 
 
+def _resolve_first(payload: Mapping[str, Any], paths: tuple[str, ...]) -> Any:  # Any: поле JSON
+    """Первое непустое значение из путей (нет поля, ``null`` и ``""`` - к следующему пути).
+
+    Нужен для необязательных полей события: старые события их не несут. Если непустого значения
+    нет нигде, берётся значение последнего пути (как у одиночного пути: нет поля - ошибка).
+
+    Raises:
+        MappingError: у последнего пути нет поля.
+    """
+    for path in paths[:-1]:
+        try:
+            value = resolve_path(payload, path)
+        except MappingError:
+            continue
+        if value is not None and value != "":
+            return value
+    return resolve_path(payload, paths[-1])
+
+
 def _same(expected: FilterValue, actual: object) -> bool:
     # bool - подкласс int: `True == 1`, но фильтр `true` не должен пропускать число 1.
     return type(expected) is type(actual) and expected == actual
@@ -112,7 +131,8 @@ def map_event(
     elif user_id is None:
         raise MappingError("для типа с audience нужен user_id получателя")
     values = {
-        name: _text(resolve_path(payload, path)) for name, path in notification_type.params.items()
+        name: _text(_resolve_first(payload, paths))
+        for name, paths in notification_type.params.items()
     }
     for name, lookup in notification_type.lookups.items():
         code = _text(resolve_path(payload, lookup.path))

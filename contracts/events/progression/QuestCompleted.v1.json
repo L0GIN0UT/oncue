@@ -32,6 +32,14 @@
       "pattern": "^[a-z][a-z0-9_]*$",
       "type": "string"
     },
+    "quest_title": {
+      "description": "Читаемое название задания из конфига progression на момент выполнения (для текстов уведомлений). Необязательное: старые события его не несут — потребитель откатывается на `quest_key`",
+      "maxLength": 120,
+      "type": [
+        "string",
+        "null"
+      ]
+    },
     "reward": {
       "additionalProperties": false,
       "description": "Награда: опыт и Версы (0 — нет)",

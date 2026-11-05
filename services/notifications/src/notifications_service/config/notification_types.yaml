@@ -37,7 +37,8 @@ types:
     user_mutable: true
     channels: {in_app: true, email: false, push: false}
     params:
-      quest: payload.quest_key
+      # Название из конфига progression; старые события без него - ключ задания.
+      quest: [payload.quest_title, payload.quest_key]
     templates:
       ru:
         title: Задание выполнено

@@ -107,6 +107,19 @@ async def test_completed_quest_is_not_rewarded_again_by_more_progress(progressio
     assert len(await progression.outbox("progression.QuestCompleted")) == 1
 
 
+async def test_quest_completed_event_carries_quest_title(progression: Service) -> None:
+    """Событие несёт читаемое название задания из снимка (для текста уведомления)."""
+    await progression.publish_config(rewards=True)
+    user = uuid7()
+    items = (await progression.get("/v1/me/quests", user)).json()["daily"]["items"]
+    expected = next(q["title"] for q in items if q["key"] == "play_3_solo")
+    await progression.deliver(progression.game_finished(user, [10, 10, 10]))
+    events = await progression.outbox("progression.QuestCompleted")
+    assert [e.payload["quest_key"] for e in events] == ["play_3_solo"]
+    assert events[0].payload["quest_title"] == expected
+    assert expected
+
+
 async def test_event_from_previous_period_counts_to_that_period(progression: Service) -> None:
     await progression.publish_config(rewards=True)
     user = uuid7()
