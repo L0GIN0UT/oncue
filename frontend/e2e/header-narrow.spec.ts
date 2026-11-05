@@ -4,7 +4,7 @@
  */
 import { expect, login, test } from "./fixtures";
 
-const TEST_IDS = ["nav-verses", "nav-library", "nav-leaders", "nav-profile"] as const;
+const TEST_IDS = ["nav-verses", "nav-library-icon", "nav-leaders", "nav-profile"] as const;
 
 for (const width of [320, 360, 390]) {
   test(`шапка пользователя на ${width} px не переполняется`, async ({ page }) => {

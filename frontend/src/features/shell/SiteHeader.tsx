@@ -90,7 +90,7 @@ export function SiteHeader() {
             {/* Левее колокольчика: так он и его панель остаются на прежнем месте. */}
             <Link
               href="/library"
-              data-testid="nav-library"
+              data-testid="nav-library-icon"
               aria-label={t("nav.library")}
               className="grid size-10 flex-none place-items-center rounded-full border-[1.5px] border-rule bg-stage text-ink-muted transition-colors hover:border-rule-strong hover:text-ink"
             >
