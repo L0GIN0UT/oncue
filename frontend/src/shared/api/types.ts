@@ -26,6 +26,7 @@ export type DailyStatus = G["DailyStatus"];
 export type Answer = G["GuessRequest"]["answer"];
 export type Domain = ModeOut["domain"];
 export type FinalClue = G["FinalClue"];
+export type Artwork = G["Artwork"];
 export type ShownItem = G["ShownItem"];
 export type OptionOut = G["OptionOut"];
 export type RoundProgress = G["RoundProgress"];

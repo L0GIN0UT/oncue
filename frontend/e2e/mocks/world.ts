@@ -430,6 +430,13 @@ export type Scenario = {
    * это: без него моки скрывают регрессии «обложка подменила кадр».
    */
   revealArtwork?: boolean;
+  /** Ссылка на обложку (ревил и итоги) «протухла»: файл отвечает 403, свежую даёт `POST .../artwork`. */
+  staleArtworkLinks?: boolean;
+  /**
+   * Предзагрузка (#114): снимок и ответ хода отдают `next_round_first_clue` — ссылку на уровень 1
+   * следующего раунда (в реальном game — в режимах random и collection, когда флаг включён).
+   */
+  nextRoundPreload?: boolean;
   /** Этап 5a: блоки профиля (`progress`, `wallet`, `quests`, `badges`, `wheel`) и `home`, которые гаснут. */
   progressDown?: string[];
   /** Этап 5a: спин колеса отвечает 409 `progression.wheel_disabled`. */
@@ -537,6 +544,8 @@ export class MockWorld {
   refreshCalls = 0;
   /** Сколько раз выдавалась свежая ссылка ревила (`final-clue`). */
   finalClueCalls = 0;
+  /** Сколько раз выдавалась свежая ссылка обложки (`artwork`). */
+  artworkCalls = 0;
   /** Журнал выданных ссылок на ассеты: путь → параметры (для отдачи «файла»). */
   assets = new Map<string, Asset>();
   /** Лучшие результаты пользователей по режимам (рекорды, D11). */
@@ -553,6 +562,8 @@ export class MockWorld {
     this.revokedRefresh.clear();
     this.refreshCalls = 0;
     this.finalClueCalls = 0;
+    this.artworkCalls = 0;
+    this.nextClues.clear();
     this.users = BASE_USERS.map((u) => ({ ...u }));
     this.ugc.reset();
     this.progression.reset();
@@ -950,15 +961,48 @@ export class MockWorld {
       persons: [{ name: item.person.name, role: item.person.role }],
       metric: s.mode.source_type === "pair" ? metricOf(item) : null,
       final_clue: this.finalClue(s, r),
-      artwork: this.scenario.revealArtwork
-        ? {
-            url: this.assetUrl("image", 0, 0, 900 + r.index),
-            expires_at: new Date(this.now().getTime() + 60_000).toISOString(),
-            mime: "image/svg+xml",
-          }
-        : null,
+      artwork: this.scenario.revealArtwork ? this.artworkOut(r) : null,
     };
   }
+
+  /** Обложка ответа раунда (форма `Reveal.artwork`); `stale` — ссылка уже не откроется. */
+  artworkOut(r: Round, fresh = false) {
+    const stale = this.scenario.staleArtworkLinks && !fresh;
+    return {
+      url: stale
+        ? this.staleUrl("image", 900 + r.index)
+        : this.assetUrl("image", 0, 0, 900 + r.index),
+      expires_at: new Date(this.now().getTime() + 60_000).toISOString(),
+      mime: "image/svg+xml",
+    };
+  }
+
+  /** Свежая ссылка обложки (`POST .../rounds/{i}/artwork`). */
+  freshArtwork(r: Round) {
+    this.artworkCalls += 1;
+    return this.artworkOut(r, true);
+  }
+
+  /**
+   * `next_round_first_clue`: уровень 1 текущего раунда, если он только что открылся (предыдущий
+   * раунд закрыт). Только в режимах random и сборников, как в реальном game.
+   */
+  nextFirstClue(s: MockSession) {
+    if (!this.scenario.nextRoundPreload || s.status !== "active") return null;
+    if (s.mode.source_type !== "random" && !s.collection) return null;
+    const next = s.rounds.find((x) => x.index === s.current);
+    const prev = s.rounds.find((x) => x.index === s.current - 1);
+    if (!next || next.status !== "active" || next.level !== 1 || !prev) return null;
+    // Одна ссылка на раунд: поле в снимке и в ответе хода — «то же» (в моке подпись каждый раз новая).
+    const key = `${s.id}:${next.index}`;
+    let clue = this.nextClues.get(key);
+    if (!clue) {
+      clue = this.levelClue(s, next, 1);
+      this.nextClues.set(key, clue);
+    }
+    return clue;
+  }
+  private nextClues = new Map<string, ReturnType<MockWorld["levelClue"]>>();
 
   // ------------------------------------------------------------------ представления
 
@@ -1053,6 +1097,7 @@ export class MockWorld {
       max_score: this.maxScore(s),
       current_round: s.current,
       rounds: s.rounds.map((r) => this.roundOut(s, r)),
+      next_round_first_clue: this.nextFirstClue(s),
     };
   }
 
@@ -1211,6 +1256,7 @@ export class MockWorld {
               level: r.level,
               points: r.points,
               media_item_id: r.reveal?.media_item_id ?? null,
+              artwork: r.reveal?.artwork ?? null,
               exact_pct: res.daily_stats?.find((d) => d.index === r.index)?.exact_pct ?? null,
             })),
           },

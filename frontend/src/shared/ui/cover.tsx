@@ -21,6 +21,7 @@ export function Cover({
   label,
   placeholder,
   className,
+  onError,
 }: {
   src?: string | null;
   alt?: string;
@@ -30,6 +31,8 @@ export function Cover({
   /** Содержимое заглушки (например, иконка домена), когда картинки нет. */
   placeholder?: ReactNode;
   className?: string;
+  /** Картинка не открылась (истекла ссылка): родитель может выдать новую и передать другой `src`. */
+  onError?: (src: string) => void;
 }) {
   // Ссылка могла истечь или не открыться: тогда, как без картинки, показываем заглушку.
   const [failed, setFailed] = useState<string | null>(null);
@@ -50,7 +53,10 @@ export function Cover({
           src={shown}
           alt={alt}
           className="size-full object-cover"
-          onError={() => setFailed(shown)}
+          onError={() => {
+            setFailed(shown);
+            onError?.(shown);
+          }}
         />
       ) : (
         <span aria-hidden className="grid size-full place-items-center text-ink-dim">

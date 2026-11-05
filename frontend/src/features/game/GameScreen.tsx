@@ -10,6 +10,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { useFormatter, useTranslations } from "next-intl";
 import { isApiError } from "@/shared/api/errors";
 import type { AnswerFormat, ModeOut, Presentation, RoundOut } from "@/shared/api/types";
@@ -32,7 +33,7 @@ import { tapeWeights } from "./levels";
 import { useSessionMode } from "./modes";
 import type { Move } from "./moves";
 import { readyForResults, statsOf, visibleRound } from "./state";
-import { useClue, useReleaseClues } from "./use-clue";
+import { preloadClue, useClue, useReleaseClues } from "./use-clue";
 import { useGame } from "./use-game";
 
 /** Формат ответа: из режима, а пока список режимов не пришёл — по наличию вариантов раунда. */
@@ -95,6 +96,15 @@ export function GameScreen({ sessionId }: { sessionId: string }) {
   if (knownKind && imageClue !== (knownKind === "image")) setImageClue(knownKind === "image");
   const [clueRef, clueHeight] = useReservedHeight(!!clue.data);
   const onMove = useCallback((move: Move) => void act(move), [act]);
+
+  // Ответ раунда открыт: файл уровня 1 следующего раунда качаем заранее (`next_round_first_clue`).
+  const queryClient = useQueryClient();
+  const nextClue = revealing ? (snapshot?.next_round_first_clue ?? null) : null;
+  const nextRoundIndex = snapshot?.current_round ?? null;
+  useEffect(() => {
+    if (nextClue && nextRoundIndex !== null)
+      void preloadClue(queryClient, sessionId, nextRoundIndex, nextClue);
+  }, [nextClue, nextRoundIndex, queryClient, sessionId]);
 
   // Уведомления хода — тостом.
   useEffect(() => {

@@ -2,11 +2,12 @@
 /** Общие части презентеров итога: строки раундов и рекорд режима. */
 import { useFormatter, useTranslations } from "next-intl";
 import { Film, Music, Trophy } from "lucide-react";
-import type { ResultRecord, ResultRoundCard } from "@/shared/api/types";
+import type { Domain, ResultRecord, ResultRoundCard } from "@/shared/api/types";
 import { cn } from "@/shared/lib/cn";
 import { Cover } from "@/shared/ui/cover";
 import { levelSeconds } from "@/features/game/levels";
 import { SaveButton } from "@/features/library/SaveButton";
+import { useRoundArtwork } from "@/features/game/use-artwork";
 import type { PresenterProps } from "./types";
 
 /** Цвет очков раунда: зелёные у угаданного и частичного, красные у нуля. */
@@ -20,14 +21,13 @@ const POINTS_TONE: Record<ResultRoundCard["outcome"], string> = {
 
 /**
  * Строка на каждый сыгранный раунд (у марафона и пары — столько, сколько успели сыграть): обложка
- * 48 px (плашка, пока бэкенд не отдаёт картинки), название и исполнитель, «открыто N с» либо
+ * 48 px (`artwork` раунда, при `null` — плашка домена), название и исполнитель, «открыто N с» либо
  * исход словами, очки. У раунда с единицей — «Сохранить» в медиатеку (этап 3b, D5; источник
  * `results`).
  */
 export function ResultRows({ summary, items, domain, levels }: PresenterProps) {
   const t = useTranslations();
   const format = useFormatter();
-  const Icon = domain === "film" ? Film : Music;
   // Подпись «Сохранить» — одна над списком, а на каждой из нескольких строк только значок.
   const saveable = summary.rounds.filter((r) => r.media_item_id).length;
   const compact = saveable > 1;
@@ -49,12 +49,7 @@ export function ResultRows({ summary, items, domain, levels }: PresenterProps) {
               data-testid="result-row"
               className="flex flex-wrap items-center gap-x-3.5 gap-y-2 rounded-[14px] border-[1.5px] border-rule bg-stage px-3.5 py-3"
             >
-              <Cover
-                ratio={domain === "film" ? "poster" : "square"}
-                src={null}
-                placeholder={<Icon className="size-5" aria-hidden />}
-                className="w-12 flex-none rounded-[10px]"
-              />
+              <RoundCover sessionId={summary.session_id} round={r} domain={domain} />
               <div className="min-w-0 flex-1 basis-40">
                 <p dir="auto" className="truncate text-base font-semibold">
                   {item?.title ?? t("results.unknownItem")}
@@ -98,6 +93,32 @@ export function ResultRows({ summary, items, domain, levels }: PresenterProps) {
         })}
       </ol>
     </>
+  );
+}
+
+/**
+ * Обложка (музыка) или постер (кино) строки: `artwork` раунда из bff. Нет картинки (`null`) или она
+ * не открылась и после перевыдачи ссылки — плашка с иконкой домена.
+ */
+function RoundCover({
+  sessionId,
+  round,
+  domain,
+}: {
+  sessionId: string;
+  round: ResultRoundCard;
+  domain: Domain;
+}) {
+  const Icon = domain === "film" ? Film : Music;
+  const { url, onError } = useRoundArtwork(sessionId, round.index, round.artwork);
+  return (
+    <Cover
+      ratio={domain === "film" ? "poster" : "square"}
+      src={url}
+      onError={onError}
+      placeholder={<Icon className="size-5" aria-hidden />}
+      className="w-12 flex-none rounded-[10px]"
+    />
   );
 }
 

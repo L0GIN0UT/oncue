@@ -131,6 +131,7 @@ export function createHandlers(world: MockWorld, matchWorld?: MatchWorld): HttpH
         round: world.roundOut(s, r),
         session: world.snapshot(s),
         stats,
+        next_round_first_clue: world.nextFirstClue(s),
       };
       world.idempotency.set(`${subject}:${key}`, { status: 200, body: payload });
       return HttpResponse.json(payload, { headers: { "Cache-Control": "no-store" } });
@@ -252,6 +253,22 @@ export function createHandlers(world: MockWorld, matchWorld?: MatchWorld): HttpH
         return problem(409, "game.round_not_finished");
       }
       return HttpResponse.json(world.freshFinalClue(s, r), {
+        headers: { "Cache-Control": "no-store" },
+      });
+    }),
+
+    http.post(`${g}/sessions/:session_id/rounds/:index/artwork`, ({ request, params }) => {
+      const subject = subjectOf(request);
+      if (!subject) return problem(401, "auth.unauthenticated");
+      if (!csrfOk(request)) return problem(403, "auth.csrf_failed");
+      const s = world.sessions.get(String(params.session_id));
+      if (!s || s.subject !== subject) return problem(404, "game.session_not_found");
+      const r = s.rounds.find((x) => x.index === Number(params.index));
+      if (!r || r.status !== "finished") {
+        if (r?.status === "void") return problem(410, "game.asset_unavailable");
+        return problem(409, "game.round_not_finished");
+      }
+      return HttpResponse.json(world.freshArtwork(r), {
         headers: { "Cache-Control": "no-store" },
       });
     }),
