@@ -1385,6 +1385,8 @@ export interface components {
          * @description Итог хода.
          */
         MoveResult: {
+            /** @description То же, что `session.next_round_first_clue` */
+            next_round_first_clue?: components["schemas"]["ClueOut"] | null;
             /**
              * Result
              * @description Результат ответа; null для пропуска и сдачи
@@ -1991,6 +1993,8 @@ export interface components {
             /** Max Score */
             max_score: number;
             mode: components["schemas"]["ModeRef"];
+            /** @description Предзагрузка: уровень 1 следующего раунда, когда предыдущий завершён, а следующий ещё не начат (режимы с `features.preload_next_round`); иначе null. Таймер не запускает: старт раунда по-прежнему `POST .../clue` */
+            next_round_first_clue?: components["schemas"]["ClueOut"] | null;
             /** Rounds */
             rounds: components["schemas"]["RoundOut"][];
             /** Score */
