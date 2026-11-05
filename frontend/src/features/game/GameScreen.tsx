@@ -8,7 +8,7 @@
  * `source_type` экран не читает. Режим сессии ищется по `mode.key` снимка во всех видах каталога
  * (`kind=play` и `kind=collection`), поэтому у сессии по сборнику те же уровни и название.
  */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useFormatter, useTranslations } from "next-intl";
 import { isApiError } from "@/shared/api/errors";
@@ -38,6 +38,23 @@ import { useGame } from "./use-game";
 /** Формат ответа: из режима, а пока список режимов не пришёл — по наличию вариантов раунда. */
 export function answerFormatOf(mode: ModeOut | undefined, round: RoundOut): AnswerFormat {
   return mode?.answer_format ?? ((round.options ?? []).length > 0 ? "pick" : "classic");
+}
+
+/**
+ * Высота, занятая загадкой: пока грузится другая (новый раунд, ошибка), блок держит прежний
+ * размер, и страница не схлопывается, а прокрутка не прыгает. Запоминается только готовая загадка.
+ */
+function useReservedHeight(ready: boolean) {
+  const ref = useRef<HTMLElement>(null);
+  const [height, setHeight] = useState(0);
+  useEffect(() => {
+    const el = ref.current;
+    if (!ready || !el || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => setHeight(Math.round(el.offsetHeight)));
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [ready]);
+  return [ref, height] as const;
 }
 
 export function GameScreen({ sessionId }: { sessionId: string }) {
@@ -76,6 +93,7 @@ export function GameScreen({ sessionId }: { sessionId: string }) {
   const [imageClue, setImageClue] = useState(false);
   const knownKind = clue.data?.kind;
   if (knownKind && imageClue !== (knownKind === "image")) setImageClue(knownKind === "image");
+  const [clueRef, clueHeight] = useReservedHeight(!!clue.data);
   const onMove = useCallback((move: Move) => void act(move), [act]);
 
   // Уведомления хода — тостом.
@@ -196,7 +214,12 @@ export function GameScreen({ sessionId }: { sessionId: string }) {
       ) : (
         <>
           {withClue && (
-            <section aria-label={t("game.clueLabel")} className="flex flex-col items-center">
+            <section
+              ref={clueRef}
+              aria-label={t("game.clueLabel")}
+              className="flex flex-col items-center"
+              style={{ minHeight: clueHeight || undefined }}
+            >
               {Clue && clue.data ? (
                 <Clue
                   clue={clue.data}

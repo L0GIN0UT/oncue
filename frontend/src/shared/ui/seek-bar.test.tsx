@@ -78,7 +78,14 @@ describe("SeekBar", () => {
     bar({ value: 7.4, open: 12 });
     const el = screen.getByRole("slider", { name: "Перемотка" });
     expect(el).toHaveAttribute("aria-valuemax", "12");
-    expect(el).toHaveAttribute("aria-valuenow", "7");
-    expect(el).toHaveAttribute("aria-valuetext", "7 с из 12 с");
+    expect(el).toHaveAttribute("aria-valuenow", "7.4");
+    expect(el).toHaveAttribute("aria-valuetext", "7,4 с из 12 с");
+  });
+
+  it("доступность: уровень 0,5 с не округляется до секунды (бегунок в нуле — valuenow 0)", () => {
+    bar({ value: 0, open: 0.5 });
+    const el = screen.getByRole("slider");
+    expect(el).toHaveAttribute("aria-valuenow", "0");
+    expect(el).toHaveAttribute("aria-valuemax", "0.5");
   });
 });

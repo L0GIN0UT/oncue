@@ -3,7 +3,7 @@
  * чтобы повтор воспроизведения не требовал новой ссылки. Ошибка скачивания — повторная выдача
  * (не больше двух раз); ответы сервера 4xx не повторяются.
  */
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient, type Query } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { api, unwrap } from "@/shared/api/client";
 import { NetworkError } from "@/shared/api/errors";
@@ -35,8 +35,20 @@ export async function loadClue(
 export const clueKey = (sessionId: string, roundIndex: number, level: number) =>
   ["clue", sessionId, roundIndex, level] as const;
 
+/**
+ * Пока грузится следующий уровень того же раунда, остаётся прежний ассет: загадка не
+ * размонтируется, высота страницы и прокрутка не прыгают. Чужой раунд или сессия — не наследуем.
+ */
+function keepWithinRound(sessionId: string, roundIndex: number | null) {
+  return (previous: LoadedClue | undefined, previousQuery: Query<LoadedClue> | undefined) => {
+    const key = previousQuery?.queryKey;
+    return key && key[1] === sessionId && key[2] === roundIndex ? previous : undefined;
+  };
+}
+
 export function useClue(sessionId: string, roundIndex: number | null, level: number | null) {
   return useQuery({
+    placeholderData: keepWithinRound(sessionId, roundIndex),
     queryKey: clueKey(sessionId, roundIndex ?? -1, level ?? -1),
     queryFn: () => loadClue(sessionId, roundIndex!, level!),
     enabled: roundIndex !== null && level !== null,
