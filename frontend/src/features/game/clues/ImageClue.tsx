@@ -1,9 +1,10 @@
 "use client";
 /**
  * Прогрессивный кадр и последовательность кадров: новый уровень проявляется поверх предыдущего
- * (плавно; при `prefers-reduced-motion` — сразу, см. globals.css). Подпись уровня строится из
- * `meta` выдачи — это `hint_fields` загадки ядра (`blur_px`, `crop`, `pixel_block`, `frame`); ассет
- * уже подготовлен media-pipeline, клиент ничего не размывает.
+ * (плавно; при `prefers-reduced-motion` — сразу, см. globals.css). Подпись есть только у
+ * последовательности кадров («Кадр N», `meta.frame`): обрезка, размытие и размер пикселя — внутренняя
+ * кухня загадки, игроку их не показываем. Ассет уже подготовлен media-pipeline, клиент ничего не
+ * размывает.
  */
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
@@ -11,24 +12,11 @@ import type { ClueMeta } from "@/shared/api/types";
 import type { ClueStageProps } from "./types";
 
 /** Части подписи уровня картинки по `meta` (пусто — подсказки уровня нет). */
-export function imageHintParts(
-  meta: ClueMeta,
-): (
-  | { key: "game.frameCrop"; percent: number }
-  | { key: "game.frameBlur"; px: number }
-  | { key: "game.posterPixels"; px: number }
-  | { key: "game.frameNumber"; frame: number }
-)[] {
+export function imageHintParts(meta: ClueMeta): { key: "game.frameNumber"; frame: number }[] {
   const parts: ReturnType<typeof imageHintParts> = [];
   // frame_sequence: уровень — другой кадр фильма, а не более чёткий тот же.
   if (meta.frame != null && meta.frame > 0)
     parts.push({ key: "game.frameNumber", frame: meta.frame });
-  if (meta.crop != null && meta.crop < 1)
-    parts.push({ key: "game.frameCrop", percent: Math.round(meta.crop * 100) });
-  if (meta.blur_px != null && meta.blur_px > 0)
-    parts.push({ key: "game.frameBlur", px: Math.round(meta.blur_px) });
-  if (meta.pixel_block != null && meta.pixel_block > 1)
-    parts.push({ key: "game.posterPixels", px: meta.pixel_block });
   return parts;
 }
 

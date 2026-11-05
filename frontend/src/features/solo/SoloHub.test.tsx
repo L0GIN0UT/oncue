@@ -33,6 +33,22 @@ describe("SoloHub — домен, фильтр, плитки и карточки
     expect(screen.queryByText("ещё не играл")).not.toBeInTheDocument();
   });
 
+  it("домен в адресе: выбор «Кино» пишет ?tab=film, а ?tab=film при заходе открывает кино", async () => {
+    signInAsGuest();
+    window.history.replaceState(null, "", "/solo");
+    const first = renderWithProviders(<SoloHub initial={null} />);
+    await screen.findByTestId("mode-card-music.random.classic");
+    await userEvent.click(screen.getByRole("radio", { name: "Кино" }));
+    expect(window.location.search).toBe("?tab=film");
+    await userEvent.click(screen.getByRole("radio", { name: "Музыка" }));
+    expect(window.location.search).toBe("");
+    first.unmount();
+
+    renderWithProviders(<SoloHub initial={null} initialDomain="film" />);
+    expect(await screen.findByTestId("mode-card-film.random.description")).toBeInTheDocument();
+    expect(screen.queryByTestId("mode-card-music.random.classic")).not.toBeInTheDocument();
+  });
+
   it("кино: фильтр по видам, марафон с выбором персоны, пары и плитка сетки недели", async () => {
     signInAsGuest();
     renderWithProviders(<SoloHub initial={null} />);
@@ -54,6 +70,18 @@ describe("SoloHub — домен, фильтр, плитки и карточки
 
     await userEvent.click(screen.getByRole("tab", { name: "Все" }));
     expect(screen.getByTestId("mode-card-film.random.description")).toBeInTheDocument();
+  });
+
+  it("раскрытая карточка: описание режима один раз, число раундов рядом с остальными сведениями", async () => {
+    signInAsGuest();
+    renderWithProviders(<SoloHub initial={null} />);
+    const random = await screen.findByTestId("mode-card-music.random.classic");
+    const description = "Треки по вступлению без ограничений";
+    expect(within(random).getAllByText(description)).toHaveLength(1);
+    await userEvent.click(within(random).getByRole("button", { expanded: false }));
+    expect(within(random).getAllByText(description)).toHaveLength(1);
+    // «N раундов» — в одной строке сведений с рекордом, а не отдельной строкой.
+    expect(within(random).getByTestId("mode-meta")).toHaveTextContent(/\d+ раундов/);
   });
 
   it("карточка раскрывается и сворачивается по клику", async () => {

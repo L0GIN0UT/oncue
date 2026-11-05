@@ -1,5 +1,11 @@
 import Link from "next/link";
+import type { Metadata } from "next";
 import { getTranslations } from "next-intl/server";
+
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t("notFound.title"), robots: { index: false } };
+}
 
 export default async function NotFound() {
   const t = await getTranslations();

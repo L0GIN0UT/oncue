@@ -5,6 +5,7 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
+import { createTranslator } from "next-intl";
 import messages from "../../../messages/ru.json";
 import { SOCIAL_ERROR_CODES, SOCIAL_EXTRA_KEYS } from "@/features/friends/errors";
 import { CHAT_REJECT_REASONS, MATCH_ERROR_CODES } from "@/features/match/errors";
@@ -41,6 +42,30 @@ function leaves(node: unknown, prefix = ""): [string, unknown][] {
 }
 
 describe("messages/ru.json", () => {
+  it("«сколько можно сыграть»: нуль объяснён, а не «0 из 50 можно сыграть» без пояснения", () => {
+    const t = createTranslator({ locale: "ru", messages });
+    expect(t("collections.play.playable", { playable: 12, total: 50 })).toBe(
+      "12 из 50 готовы к игре",
+    );
+    const none = t("collections.play.playable", { playable: 0, total: 50 });
+    expect(none).toContain("ни одна из 50");
+    expect(none).not.toMatch(/^0 из 50 можно сыграть/);
+  });
+
+  it("бренд: в текстах игрока Guessverse, прежнего названия OnCue нет", () => {
+    const offenders = leaves(messages)
+      .filter(([, v]) => typeof v === "string" && /oncue/i.test(v))
+      .map(([k]) => k);
+    expect(offenders).toEqual([]);
+  });
+
+  it("терминология: везде «аватар», а не «аватарка» (магазин и профиль говорят одним словом)", () => {
+    const offenders = leaves(messages)
+      .filter(([, v]) => typeof v === "string" && /аватарк/i.test(v))
+      .map(([k]) => k);
+    expect(offenders).toEqual([]);
+  });
+
   it("содержит все статические ключи из исходников", () => {
     const missing: string[] = [];
     for (const file of files(path.join(root, "src"))) {

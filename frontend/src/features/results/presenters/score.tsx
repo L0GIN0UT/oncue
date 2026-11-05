@@ -4,18 +4,8 @@
  * раундов с цветом исхода и рекорд режима; ниже — строки раундов.
  */
 import { useTranslations } from "next-intl";
-import { OutcomeTabs, type TabState } from "@/features/game/RoundTabs";
-import type { ResultRoundCard } from "@/shared/api/types";
 import { RecordBadge, ResultRows } from "./common";
 import type { Presenter, PresenterProps } from "./types";
-
-const TAB_STATE: Record<ResultRoundCard["outcome"], TabState> = {
-  exact: "exact",
-  partial: "partial",
-  miss: "miss",
-  gave_up: "miss",
-  void: "skip",
-};
 
 function ScoreHeader({ summary }: PresenterProps) {
   const t = useTranslations();
@@ -37,12 +27,6 @@ function ScoreHeader({ summary }: PresenterProps) {
           {t("results.guessed", { guessed, total: summary.rounds.length })}
         </p>
       </div>
-      {summary.rounds.length > 1 && (
-        <OutcomeTabs
-          className="w-full"
-          tabs={summary.rounds.map((r) => ({ index: r.index, state: TAB_STATE[r.outcome] }))}
-        />
-      )}
       <RecordBadge record={summary.record} unit="score" />
     </>
   );

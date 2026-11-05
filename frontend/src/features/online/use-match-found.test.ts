@@ -10,7 +10,7 @@ function setHidden(hidden: boolean) {
 describe("useMatchFound", () => {
   beforeEach(() => {
     vi.useFakeTimers();
-    document.title = "Онлайн · OnCue";
+    document.title = "Онлайн · Guessverse";
   });
   afterEach(() => {
     setHidden(false);
@@ -30,7 +30,7 @@ describe("useMatchFound", () => {
     expect(go).not.toHaveBeenCalled();
     vi.advanceTimersByTime(FOUND_DELAY_MS);
     expect(go).toHaveBeenCalledWith("K7MQ2XWP");
-    expect(document.title).toBe("Онлайн · OnCue");
+    expect(document.title).toBe("Онлайн · Guessverse");
   });
 
   it("фоновая вкладка: заголовок мигает, переход — только при возвращении", () => {
@@ -39,12 +39,12 @@ describe("useMatchFound", () => {
     renderHook(() => useMatchFound("K7MQ2XWP", "Соперник найден!", go));
     expect(document.title).toBe("Соперник найден!");
     vi.advanceTimersByTime(1000);
-    expect(document.title).toBe("Онлайн · OnCue");
+    expect(document.title).toBe("Онлайн · Guessverse");
     vi.advanceTimersByTime(60_000);
     expect(go).not.toHaveBeenCalled();
     setHidden(false);
     expect(go).toHaveBeenCalledWith("K7MQ2XWP");
-    expect(document.title).toBe("Онлайн · OnCue");
+    expect(document.title).toBe("Онлайн · Guessverse");
   });
 
   it("размонтирование отменяет переход и мигание", () => {
@@ -57,7 +57,7 @@ describe("useMatchFound", () => {
     setHidden(true);
     const hidden = renderHook(() => useMatchFound("BBBB3333", "Найден", go));
     hidden.unmount();
-    expect(document.title).toBe("Онлайн · OnCue");
+    expect(document.title).toBe("Онлайн · Guessverse");
     setHidden(false);
     expect(go).not.toHaveBeenCalled();
   });

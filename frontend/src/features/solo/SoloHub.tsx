@@ -31,6 +31,7 @@ import { useNow } from "@/features/daily/use-now";
 import { Chip } from "@/shared/ui/chip";
 import { Cover } from "@/shared/ui/cover";
 import { ListRow } from "@/shared/ui/list-row";
+import { setUrlParam } from "@/shared/lib/url-state";
 import { PillTabs } from "@/shared/ui/pill-tabs";
 import { Segmented } from "@/shared/ui/segmented";
 import { useIcons } from "@/shared/ui/theme-provider";
@@ -48,7 +49,14 @@ const CHIP = "rounded-full bg-stage-raised px-[9px] py-[3px] text-xs font-semibo
 const descriptionKey = (titleKey: string) => titleKey.replace(/\.title$/, ".description");
 const groupId = (g: ModeGroup) => `${g.source_type}:${g.presentation}`;
 
-export function SoloHub({ initial }: { initial: SoloPage | null }) {
+export function SoloHub({
+  initial,
+  initialDomain = "music",
+}: {
+  initial: SoloPage | null;
+  /** Вкладка из `?tab=` (Музыка или Кино). */
+  initialDomain?: Domain;
+}) {
   const t = useTranslations();
   const dt = useDynamicT();
   const panelId = useId();
@@ -66,7 +74,7 @@ export function SoloHub({ initial }: { initial: SoloPage | null }) {
     initialData: initial ?? undefined,
   });
   useRetryUnavailableOnce(data, refetch, SOLO_SHARED_BLOCKS);
-  const [domain, setDomain] = useState<Domain>("music");
+  const [domain, setDomain] = useState<Domain>(initialDomain);
   const [filter, setFilter] = useState<string>(ALL);
   const [open, setOpen] = useState<string | null>(null);
 
@@ -98,6 +106,7 @@ export function SoloHub({ initial }: { initial: SoloPage | null }) {
 
   function pickDomain(next: Domain) {
     setDomain(next);
+    setUrlParam("tab", next === "music" ? null : next);
     setFilter(ALL);
     setOpen(null);
   }
@@ -353,6 +362,13 @@ function ModeCardTile({
     : isUser
       ? { text: t("solo.notPlayed"), good: false }
       : null;
+  // Сведения раскрытой карточки одной строкой: число раундов и процентиль рекорда.
+  const meta = [
+    !subject && mode.presentation === "score" ? t("solo.rounds", { count: mode.rounds }) : null,
+    record?.percentile != null
+      ? t("records.percentile", { pct: Math.round(record.percentile) })
+      : null,
+  ].filter((part): part is string => part !== null);
   const href = preset
     ? `/play/${mode.key}?preset=${encodeURIComponent(preset)}`
     : `/play/${mode.key}`;
@@ -375,7 +391,8 @@ function ModeCardTile({
           <span className="text-sm leading-tight font-semibold">
             {dt(mode.title_key, mode.key)}
           </span>
-          {description && (
+          {/* В раскрытой карточке то же описание стоит ниже целиком — не повторяем. */}
+          {description && !open && (
             <span className="truncate text-xs leading-tight text-ink-muted">{description}</span>
           )}
         </span>
@@ -393,12 +410,9 @@ function ModeCardTile({
       {open && (
         <div id={bodyId} className="flex animate-rise flex-col gap-3 pt-1">
           {description && <p className="text-[15px] leading-normal text-ink-soft">{description}</p>}
-          {!subject && mode.presentation === "score" && (
-            <p className="text-[13px] text-ink-muted">{t("solo.rounds", { count: mode.rounds })}</p>
-          )}
-          {record?.percentile != null && (
-            <p className="text-[13px] text-ink-muted">
-              {t("records.percentile", { pct: Math.round(record.percentile) })}
+          {meta.length > 0 && (
+            <p className="text-[13px] text-ink-muted" data-testid="mode-meta">
+              {meta.join(" · ")}
             </p>
           )}
           <div className="flex flex-wrap items-center justify-between gap-3">

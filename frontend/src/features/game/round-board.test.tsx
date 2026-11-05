@@ -160,17 +160,43 @@ describe("RevealDialog", () => {
 
   it("пропуск на каждом уровне: шапка «Пропущено», попытка — прочерк", () => {
     signInAsGuest();
+    const levels = finishedRound().levels_count;
     renderWithProviders(
       <RevealDialog
         {...base}
         last={false}
-        round={finishedRound({ points: 0, guesses: [guess("skip", null), guess("skip", null)] })}
+        round={finishedRound({
+          points: 0,
+          guesses: Array.from({ length: levels }, () => guess("skip", null)),
+        })}
         onNext={vi.fn()}
         domain="music"
       />,
     );
     expect(screen.getByTestId("reveal-outcome")).toHaveTextContent("Пропущено");
     expect(screen.getByText("—")).toBeInTheDocument();
+  });
+
+  it.each([
+    ["после пропусков", [guess("skip", null), guess("skip", null)]],
+    ["сразу", []],
+  ])("«Сдаться» %s: своя шапка и без статистики попытки и очков", (_name, guesses) => {
+    signInAsGuest();
+    renderWithProviders(
+      <RevealDialog
+        {...base}
+        last={false}
+        round={finishedRound({ points: 0, guesses })}
+        onNext={vi.fn()}
+        domain="music"
+      />,
+    );
+    expect(screen.getByTestId("reveal-outcome")).toHaveTextContent("Сдались");
+    expect(screen.getByTestId("reveal-outcome")).not.toHaveTextContent("Пропущено");
+    expect(screen.queryByText("Попытка")).not.toBeInTheDocument();
+    expect(screen.queryByText("Очки")).not.toBeInTheDocument();
+    // Ответ при этом показан.
+    expect(screen.getByRole("heading", { name: "Creep" })).toBeInTheDocument();
   });
 
   it("промах: серая шапка; последний раунд — «К итогам»; Escape и пробел продолжают", async () => {

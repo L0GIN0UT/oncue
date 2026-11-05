@@ -2,7 +2,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { screen, waitFor } from "@testing-library/react";
 import { signInAsGuest, setupMockBackend, world } from "@/test/msw";
-import { renderWithProviders } from "@/test/render";
+import { renderWithGameShell, renderWithProviders } from "@/test/render";
 import { personId, type MockSession } from "../../../e2e/mocks/world";
 import { ResultsView } from "./ResultsView";
 
@@ -71,7 +71,8 @@ describe("ResultsView: следующий шаг", () => {
     const next = await screen.findByTestId("results-next");
     await waitFor(() => expect(next).toHaveTextContent("Теперь кино"));
     expect(next).toHaveAttribute("href", "/play/film.daily.frame");
-    expect(screen.getByTestId("round-tabs").querySelectorAll("li")).toHaveLength(5);
+    // Итог раундов — одной сутью: строки; полоска 1–5 над ними дублировала бы их.
+    expect(screen.queryByTestId("round-tabs")).not.toBeInTheDocument();
     expect(screen.getByTestId("final-guessed")).toHaveTextContent("очков · 0 из 5 угадано");
     expect(screen.getAllByTestId("result-row")).toHaveLength(5);
   });
@@ -85,5 +86,15 @@ describe("ResultsView: следующий шаг", () => {
     const next = await screen.findByTestId("results-next");
     expect(next).toHaveTextContent("Другие режимы");
     expect(next).toHaveAttribute("href", "/solo");
+  });
+});
+
+describe("ResultsView: кнопки", () => {
+  it("«На главную» одна: в шапке игры, а не ещё раз внизу", async () => {
+    const s = world.startSession(signInAsGuest(), world.mode("music.daily.classic")!, null);
+    playOut(s);
+    renderWithGameShell(<ResultsView sessionId={s.id} />);
+    await screen.findByTestId("results-next");
+    expect(screen.getAllByRole("link", { name: "На главную" })).toHaveLength(1);
   });
 });

@@ -19,16 +19,34 @@ type Props = {
   source: SaveSource;
   domain?: Domain | null;
   className?: string;
+  /** Только значок: у списка единиц подпись «Сохранить» одна на всех, а не на каждой строке. */
+  compact?: boolean;
+  /** Название единицы: имя кнопки в компактном виде («Сохранить «Creep»»). */
+  itemTitle?: string;
 };
 
-export function SaveButton({ mediaItemId, source, domain, className }: Props) {
+export function SaveButton({ mediaItemId, source, domain, className, compact, itemTitle }: Props) {
   const t = useTranslations();
   const viewer = useViewer();
   const [open, setOpen] = useState(false);
   const wrapper = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const id = useId();
-  const classes = cn(buttonVariants({ variant: "secondary", size: "sm" }), className);
+  const classes = cn(
+    buttonVariants({ variant: "secondary", size: "sm" }),
+    compact && "px-0 size-11",
+    className,
+  );
+  const name = itemTitle
+    ? t("library.save.labelFor", { title: itemTitle })
+    : t("library.save.label");
+  const content = (
+    <>
+      <Bookmark aria-hidden />
+      {compact ? <span className="sr-only">{name}</span> : t("library.save.label")}
+    </>
+  );
+  const compactProps = compact ? { "data-compact": "true", title: name } : {};
 
   useEffect(() => {
     if (!open) return;
@@ -56,10 +74,10 @@ export function SaveButton({ mediaItemId, source, domain, className }: Props) {
         href="/register"
         className={classes}
         data-testid="save-button"
-        title={t("library.save.guest")}
+        {...compactProps}
+        title={compact ? `${name}. ${t("library.save.guest")}` : t("library.save.guest")}
       >
-        <Bookmark aria-hidden />
-        {t("library.save.label")}
+        {content}
       </Link>
     );
   }
@@ -74,10 +92,10 @@ export function SaveButton({ mediaItemId, source, domain, className }: Props) {
         aria-expanded={open}
         className={classes}
         data-testid="save-button"
+        {...compactProps}
         onClick={() => setOpen((v) => !v)}
       >
-        <Bookmark aria-hidden />
-        {t("library.save.label")}
+        {content}
       </button>
       {open && (
         <ShelfPicker

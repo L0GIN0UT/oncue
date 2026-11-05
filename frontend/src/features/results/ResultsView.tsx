@@ -226,9 +226,6 @@ export function ResultsView({ sessionId }: { sessionId: string }) {
               <ArrowRight aria-hidden />
             </Link>
           </Button>
-          <Button asChild size="lg" variant="secondary" className="min-w-40 flex-1">
-            <Link href="/">{t("results.home")}</Link>
-          </Button>
         </div>
 
         {isGuest && (

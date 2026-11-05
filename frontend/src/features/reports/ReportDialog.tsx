@@ -83,7 +83,7 @@ export function ReportButton({
   );
 }
 
-function ReportDialog({
+export function ReportDialog({
   kind,
   targetId,
   contextMatchId,

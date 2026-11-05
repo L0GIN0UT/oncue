@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { setupMockBackend, signInAsUser, world } from "@/test/msw";
 import { renderWithProviders } from "@/test/render";
@@ -37,6 +37,21 @@ describe("профиль игрока: social", () => {
     expect(screen.queryByTestId("player-add-friend")).toBeNull();
     await userEvent.click(screen.getByTestId("player-remove-friend"));
     await waitFor(() => expect(world.social.isFriend(PLAYER.user_id)).toBe(false));
+  });
+
+  it("«Удалить» и «Заблокировать» разведены: блокировка — в отдельной группе", async () => {
+    signInAsUser();
+    world.social.friends.push({
+      user_id: PLAYER.user_id,
+      nickname: "Игрок",
+      status: "offline",
+      friends_since: "2026-10-01T10:00:00Z",
+    });
+    renderWithProviders(<PlayerView userId={PLAYER.user_id} />);
+    const remove = await screen.findByTestId("player-remove-friend");
+    const danger = screen.getByTestId("player-danger");
+    expect(within(danger).getByTestId("player-block")).toBeInTheDocument();
+    expect(danger.contains(remove)).toBe(false);
   });
 
   it("restricted: только оформление и пояснение, без уровня и бейджей", async () => {

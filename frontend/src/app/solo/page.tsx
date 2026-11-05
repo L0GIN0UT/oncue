@@ -8,7 +8,12 @@ export async function generateMetadata(): Promise<Metadata> {
   return { title: t("solo.title") };
 }
 
-export default async function SoloPage() {
+export default async function SoloPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ tab?: string }>;
+}) {
+  const { tab } = await searchParams;
   const page = await fetchSoloPage();
-  return <SoloHub initial={page} />;
+  return <SoloHub initial={page} initialDomain={tab === "film" ? "film" : "music"} />;
 }
