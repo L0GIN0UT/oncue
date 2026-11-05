@@ -432,7 +432,7 @@ def test_share_text_has_no_answers() -> None:
         RoundState(outcome=RoundResult.VOID),
     ]
     text = share_text(
-        title="OnCue",
+        title="Guessverse",
         mode_key="music.daily.classic",
         day=TODAY,
         score=5,
@@ -441,7 +441,7 @@ def test_share_text_has_no_answers() -> None:
         url="https://x/",
     )
     assert text.splitlines() == [
-        "OnCue music.daily.classic 2026-10-10",
+        "Guessverse music.daily.classic 2026-10-10",
         "5/6",
         CELL_SKIP + CELL_EXACT,
         CELL_VOID,
