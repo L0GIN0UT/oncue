@@ -28,6 +28,7 @@ import { Tile } from "@/shared/ui/tile";
 import { SearchField } from "@/features/hubs/SearchField";
 import { collectionKeys, fetchCatalogPage, fetchMyCollections, fetchShowcase } from "../api";
 import { useCollectionModes } from "../modes";
+import { useCollectionCovers, type CoverMap } from "../cover-artwork";
 import { CollectionCard } from "./CollectionCard";
 import { CATALOG_RETURN_KEY, CollectionModal } from "./CollectionView";
 
@@ -389,11 +390,22 @@ function SelectField({ id, label, children }: { id: string; label: string; child
   );
 }
 
-function CardList({ cards }: { cards: ComponentProps<typeof CollectionCard>["card"][] }) {
+function CardList({
+  cards,
+  covers,
+}: {
+  cards: ComponentProps<typeof CollectionCard>["card"][];
+  /** Обложки из пакетной ручки (списки напрямую из collections); у витрин bff их нет. */
+  covers?: CoverMap;
+}) {
   return (
     <ul className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
       {cards.map((card) => (
-        <CollectionCard key={card.collection_id} card={card} />
+        <CollectionCard
+          key={card.collection_id}
+          card={card}
+          artwork={covers?.[card.collection_id]}
+        />
       ))}
     </ul>
   );
@@ -455,6 +467,10 @@ function ResultsList({ filters }: { filters: Filters }) {
     initialPageParam: null as string | null,
     getNextPageParam: (last) => last.next_cursor ?? null,
   });
+  // Обложки видимых карточек: одна пачка на страницу ленты, ошибка оставляет пресеты.
+  const covers = useCollectionCovers(
+    (list.data?.pages ?? []).map((p) => p.items.map((c) => c.collection_id)),
+  );
   const sentinel = useRef<HTMLDivElement>(null);
   const { hasNextPage, isFetchingNextPage, fetchNextPage } = list;
 
@@ -485,7 +501,7 @@ function ResultsList({ filters }: { filters: Filters }) {
       {cards.length === 0 ? (
         <p className="text-ink-muted">{t("collections.nothingFound")}</p>
       ) : (
-        <CardList cards={cards} />
+        <CardList cards={cards} covers={covers} />
       )}
       <div ref={sentinel} />
       {hasNextPage && (

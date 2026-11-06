@@ -3,11 +3,13 @@
 import { useQuery } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import { fetchShowcase, collectionKeys } from "@/features/collections/api";
+import { useCollectionCoverArtwork } from "@/features/collections/cover-artwork";
+import { safeImageUrl } from "@/features/cosmetics/CosmeticImage";
 import { useOnlinePage } from "@/features/online/bff";
 import { useTierLabel } from "@/features/rating/labels";
 import { blockData } from "@/shared/api/blocks";
 import { useDynamicT } from "@/shared/i18n/dynamic";
-import type { EventBannerCard, ModeCard } from "@/shared/api/types";
+import type { CollectionCardOut, EventBannerCard, ModeCard } from "@/shared/api/types";
 import { cn } from "@/shared/lib/cn";
 import { Cover } from "@/shared/ui/cover";
 import { ListRow } from "@/shared/ui/list-row";
@@ -97,9 +99,23 @@ export function OnlineTile({ isUser }: { isUser: boolean }) {
   );
 }
 
+/** Обложка карточки «Популярных»: картинка первой единицы, нет её — заглушка с иконкой домена. */
+function PopularCover({ card }: { card: CollectionCardOut }) {
+  const icons = useIcons();
+  const Icon = card.domain === "music" ? icons.music : icons.film;
+  const { url, onError } = useCollectionCoverArtwork(card.collection_id, card.cover_artwork);
+  return (
+    <Cover
+      src={safeImageUrl(url, { allowMedia: true })}
+      onError={onError}
+      label={card.title}
+      placeholder={<Icon className="size-6" />}
+    />
+  );
+}
+
 export function CollectionsTile() {
   const t = useTranslations();
-  const icons = useIcons();
   const showcase = useQuery({
     queryKey: collectionKeys.showcase({}),
     queryFn: () => fetchShowcase({}),
@@ -117,16 +133,7 @@ export function CollectionsTile() {
         <ul className="grid grid-cols-2 gap-1.5">
           {cards.map((c) => (
             <li key={c.collection_id}>
-              <Cover
-                label={c.title}
-                placeholder={
-                  c.domain === "music" ? (
-                    <icons.music className="size-6" />
-                  ) : (
-                    <icons.film className="size-6" />
-                  )
-                }
-              />
+              <PopularCover card={c} />
             </li>
           ))}
         </ul>

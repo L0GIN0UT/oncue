@@ -1,12 +1,12 @@
 "use client";
 /**
- * Карточка сборника в каталоге (макет «Сборники»): обложка-пресет с чипами домена и числа единиц,
+ * Карточка сборника в каталоге (макет «Сборники»): обложка (картинка первой единицы, запасной вариант — пресет) с чипами домена и числа единиц,
  * название (UGC, `dir="auto"`), автор, сложность, лайки, прохождения и «Играть». Вся карточка —
  * ссылка на сборник (он открывается модалкой).
  */
 import { useLocale, useTranslations } from "next-intl";
 import { Heart } from "lucide-react";
-import type { CollectionCard as Card, CollectionCardOut } from "@/shared/api/types";
+import type { CollectionCard as Card, CollectionCardOut, CoverArtwork } from "@/shared/api/types";
 import { useDynamicT } from "@/shared/i18n/dynamic";
 import { cn } from "@/shared/lib/cn";
 import { useIcons } from "@/shared/ui/theme-provider";
@@ -14,7 +14,11 @@ import { Tile } from "@/shared/ui/tile";
 import { useCollectionsMeta } from "../api";
 import { Cover } from "../Cover";
 
-type Props = { card: Card | CollectionCardOut };
+type Props = {
+  card: Card | CollectionCardOut;
+  /** Обложка из пакетной ручки covers (списки напрямую из collections); у карточек bff — своя. */
+  artwork?: CoverArtwork | null;
+};
 
 /** Подпись автора: ник пользователя, «Guessverse» у кураторских, «автор удалён». */
 export function useAuthorName(): (author: Card["author"]) => string {
@@ -48,7 +52,7 @@ function compact(n: number, locale: string): string {
   return new Intl.NumberFormat(locale, { notation: "compact", maximumFractionDigits: 1 }).format(n);
 }
 
-export function CollectionCard({ card }: Props) {
+export function CollectionCard({ card, artwork }: Props) {
   const t = useTranslations();
   const locale = useLocale();
   const authorName = useAuthorName();
@@ -62,7 +66,12 @@ export function CollectionCard({ card }: Props) {
         className="h-full gap-0 p-0"
       >
         <div className="relative">
-          <Cover preset={card.cover?.preset} className="aspect-[16/10] rounded-none ring-0" />
+          <Cover
+            preset={card.cover?.preset}
+            collectionId={card.collection_id}
+            artwork={artwork ?? ("cover_artwork" in card ? card.cover_artwork : null)}
+            className="aspect-[16/10] rounded-none ring-0"
+          />
           <span className="absolute top-2.5 left-2.5 inline-flex items-center gap-1.5 rounded-full bg-night/85 px-[9px] py-[3px] text-xs font-semibold text-music">
             <DomainIcon aria-hidden className="size-3.5" />
             {t(`domain.${card.domain}`)}

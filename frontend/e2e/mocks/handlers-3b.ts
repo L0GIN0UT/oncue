@@ -49,6 +49,27 @@ export function createUgcHandlers(world: MockWorld): HttpHandler[] {
     return col && ugc.isAuthor(col, subject) ? col : null;
   };
 
+  /**
+   * Обложка сборника (форма `cover_artwork` bff, ADR 0079): картинка первой единицы публичного
+   * опубликованного сборника, иначе `null`. `fresh` — одиночная перевыдача (рабочая ссылка).
+   */
+  const coverArtwork = (id: string, fresh = false) => {
+    const col = ugc.find(id);
+    if (ugc.scenario.noCovers || !col || col.status !== "published" || col.visibility !== "public")
+      return null;
+    const seed = 700 + (Number(id.slice(-6)) % 50);
+    const stale = ugc.scenario.staleCovers && !fresh;
+    return {
+      url: stale ? world.staleUrl("image", seed) : world.assetUrl("image", 0, 0, seed),
+      expires_at: new Date(ugc.now().getTime() + 3_600_000).toISOString(),
+      mime: "image/svg+xml",
+    };
+  };
+  const withCovers = <T extends { items: { collection_id: string }[] }>(page: T) => ({
+    ...page,
+    items: page.items.map((card) => ({ ...card, cover_artwork: coverArtwork(card.collection_id) })),
+  });
+
   const collectionPage = (id: string, subject: string | null) => {
     const col = ugc.find(id);
     if (!col || !ugc.visible(col, subject)) return null;
@@ -56,7 +77,7 @@ export function createUgcHandlers(world: MockWorld): HttpHandler[] {
     const { me, ...rest } = detail;
     return {
       blocks: {
-        collection: { status: "ok", data: rest },
+        collection: { status: "ok", data: { ...rest, cover_artwork: coverArtwork(id) } },
         modes:
           col.status === "published"
             ? { status: "ok", data: ugc.modes(col) }
@@ -306,7 +327,7 @@ export function createUgcHandlers(world: MockWorld): HttpHandler[] {
         const q = new URLSearchParams(p);
         q.set("sort", sort);
         q.set("limit", "12");
-        return { status: "ok", data: ugc.catalog(q, users()) };
+        return { status: "ok", data: withCovers(ugc.catalog(q, users())) };
       };
       if (p.get("q") || p.get("cursor"))
         return HttpResponse.json({
@@ -314,7 +335,7 @@ export function createUgcHandlers(world: MockWorld): HttpHandler[] {
             featured: null,
             popular: null,
             new: null,
-            results: { status: "ok", data: ugc.catalog(p, users()) },
+            results: { status: "ok", data: withCovers(ugc.catalog(p, users())) },
           },
         });
       return HttpResponse.json({
@@ -324,6 +345,20 @@ export function createUgcHandlers(world: MockWorld): HttpHandler[] {
           new: block("new"),
           results: null,
         },
+      });
+    }),
+
+    // Обложки списков, которые фронт берёт напрямую из collections (ADR 0079).
+    http.post("*/api/web/v1/collections/covers", async ({ request }) => {
+      const { collection_ids: ids } = (await request.json()) as { collection_ids: string[] };
+      ugc.coverCalls.push(ids);
+      if (ugc.scenario.coversFail) return problem(503, "bff.unavailable");
+      if (ids.length > 50) return problem(422, "bff.too_many_ids");
+      return ok({
+        items: [...new Set(ids)].map((id) => ({
+          collection_id: id,
+          cover_artwork: coverArtwork(id, ids.length === 1),
+        })),
       });
     }),
 

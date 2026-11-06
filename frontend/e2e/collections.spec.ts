@@ -158,3 +158,58 @@ test("мои сборники: плашка «скрыт модератором�
   await page.getByTestId("nav-library").click();
   await expect(page).toHaveURL(/\/library$/);
 });
+
+const loaded = (img: Element) => (img as HTMLImageElement).naturalWidth > 0;
+
+test("обложки: витрина и лента рисуют картинки, пачка covers уходит один раз на страницу", async ({
+  page,
+}) => {
+  const covers: string[] = [];
+  page.on("request", (r) => {
+    if (r.method() === "POST" && r.url().includes("/api/web/v1/collections/covers"))
+      covers.push(r.url());
+  });
+  // Витрина: bff уже отдал cover_artwork, пачка covers не нужна.
+  await page.goto("/collections");
+  const showcaseImg = page
+    .getByTestId("collections-block-featured")
+    .getByTestId("collection-cover-image")
+    .first();
+  await expect(showcaseImg).toBeVisible();
+  await expect.poll(() => showcaseImg.evaluate(loaded)).toBe(true);
+  expect(covers).toHaveLength(0);
+
+  // Лента (сортировка): collections напрямую, обложки одной пачкой.
+  await page.goto("/collections?sort=new");
+  const listImg = page
+    .getByTestId("collections-results")
+    .getByTestId("collection-cover-image")
+    .first();
+  await expect(listImg).toBeVisible();
+  await expect.poll(() => listImg.evaluate(loaded)).toBe(true);
+  expect(covers).toHaveLength(1);
+});
+
+test("обложки: протухшая ссылка получает свежую, ошибка covers оставляет пресет", async ({
+  page,
+  scenario,
+}) => {
+  await scenario({ ugc: { staleCovers: true } });
+  await page.goto("/collections?sort=new");
+  const results = page.getByTestId("collections-results");
+  await expect(results.locator("[data-testid^=collection-card-]").first()).toBeVisible();
+  // Пачка отдала протухшие ссылки, одиночная перевыдача заменила их рабочими.
+  await expect
+    .poll(async () => {
+      const imgs = results.getByTestId("collection-cover-image");
+      const n = await imgs.count();
+      for (let i = 0; i < n; i++) if (!(await imgs.nth(i).evaluate(loaded))) return false;
+      return n > 0;
+    })
+    .toBe(true);
+
+  await scenario({ ugc: { staleCovers: false, coversFail: true } });
+  await page.goto("/collections?sort=popular");
+  await expect(results.locator("[data-testid^=collection-card-]").first()).toBeVisible();
+  await expect(page.getByTestId("collection-cover-image")).toHaveCount(0);
+});

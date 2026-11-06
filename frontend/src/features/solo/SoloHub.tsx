@@ -7,13 +7,14 @@
  * Ключи режимов нужны только для ссылок и `data-testid`.
  */
 import Link from "next/link";
-import { useId, useState } from "react";
+import { useId, useState, type ComponentType } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import { api, unwrap } from "@/shared/api/client";
 import { blockData } from "@/shared/api/blocks";
 import { keepLastKnownBlocks, useRetryUnavailableOnce } from "@/shared/api/page-blocks";
 import type {
+  CollectionCardOut,
   DailyCard,
   Domain,
   ModeCard,
@@ -25,6 +26,8 @@ import { useDynamicT } from "@/shared/i18n/dynamic";
 import { cn } from "@/shared/lib/cn";
 import { useViewer } from "@/features/auth/session";
 import { collectionKeys, fetchShowcase } from "@/features/collections/api";
+import { useCollectionCoverArtwork } from "@/features/collections/cover-artwork";
+import { safeImageUrl } from "@/features/cosmetics/CosmeticImage";
 import { dailyHref } from "@/features/home/DailyTiles";
 import { formatClock, remainingUntil } from "@/features/daily/countdown-time";
 import { useNow } from "@/features/daily/use-now";
@@ -275,6 +278,25 @@ function BracketTile({ card }: { card: DailyCard }) {
   );
 }
 
+/** Обложка «Сборника недели»: картинка первой единицы, нет её — заглушка с иконкой домена. */
+function WeekCover({
+  card,
+  Glyph,
+}: {
+  card: CollectionCardOut;
+  Glyph: ComponentType<{ className?: string }>;
+}) {
+  const { url, onError } = useCollectionCoverArtwork(card.collection_id, card.cover_artwork);
+  return (
+    <Cover
+      src={safeImageUrl(url, { allowMedia: true })}
+      onError={onError}
+      className="w-24 flex-none"
+      placeholder={<Glyph className="size-6" />}
+    />
+  );
+}
+
 /** «Сборник недели»: первый избранный сборник домена; нет данных — вход в каталог. */
 function WeekCollectionTile({ domain }: { domain: Domain }) {
   const t = useTranslations();
@@ -309,7 +331,7 @@ function WeekCollectionTile({ domain }: { domain: Domain }) {
       data-testid="solo-collection-week"
     >
       <div className="flex items-start gap-3.5">
-        <Cover className="w-24 flex-none" placeholder={<Glyph className="size-6" />} />
+        <WeekCover card={card} Glyph={Glyph} />
         <div className="flex min-w-0 flex-col gap-1.5">
           <span className="font-display text-xl leading-[1.1] font-extrabold tracking-[-0.02em]">
             {card.title}
