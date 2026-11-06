@@ -472,3 +472,14 @@ def test_build_raises_config_error_with_all_issues(seed_body: SeedBody) -> None:
     assert info.value.details == {
         "errors": [{"path": "source.params.size", "code": "config.rounds_mismatch"}]
     }
+
+
+def test_weekly_bracket_seed_is_valid_16() -> None:
+    """Недельная сетка фильмов: 16 участников, тема с запасом (≥ 24), size − 1 выборов."""
+    path = Path(__file__).resolve().parents[3] / "seeds/game/modes/film.bracket.weekly.yaml"
+    body = yaml.safe_load(path.read_text(encoding="utf-8"))
+    params = body["source"]["params"]
+    assert params["size"] == 16
+    assert params["subject"]["min_items"] == 24 >= params["size"]
+    assert body["session"]["rounds"] == params["size"] - 1 == 15
+    assert _issues(body, SEED_FACTORY) == []

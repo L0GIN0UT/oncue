@@ -1121,7 +1121,7 @@ class TestModePlan:
         ("key", "min_playable", "period", "size", "themed"),
         [
             ("music.daily.classic", 10, "day", 5, False),
-            ("film.bracket.weekly", 32, "week", 32, True),
+            ("film.bracket.weekly", 24, "week", 16, True),
             ("film.marathon.director", 5, None, None, False),
             ("film.pair.rating", 10, None, None, False),
             ("music.random.reverse", 20, None, None, False),

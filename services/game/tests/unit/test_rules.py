@@ -93,8 +93,8 @@ def test_week_period_capabilities(factory: RulesFactory) -> None:
     assert bracket.next_period_start(date(2026, 10, 12)) == date(2026, 10, 19)
     assert bracket.next_reset_at(friday) == datetime(2026, 10, 18, 21, tzinfo=UTC)
     theme = bracket.theme_query()
-    assert theme is not None and theme.roles == {"director"} and theme.min_items == 32
-    assert bracket.is_progressive and bracket.rounds == 31 and bracket.presentation == "bracket"
+    assert theme is not None and theme.roles == {"director"} and theme.min_items == 24
+    assert bracket.is_progressive and bracket.rounds == 15 and bracket.presentation == "bracket"
     daily = rules_of(factory, "film.daily.frame")
     assert daily.next_period_start(date(2026, 10, 10)) == date(2026, 10, 11)
     assert daily.theme_query() is None
