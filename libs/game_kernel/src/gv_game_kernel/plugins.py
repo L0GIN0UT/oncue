@@ -310,7 +310,7 @@ class ProgressiveSource(Protocol):
     """
 
     def planned_rounds(self, params: BaseModel) -> int:
-        """Сколько раундов будет в сессии всего (сетка 32 — 31 выбор)."""
+        """Сколько раундов будет в сессии всего (сетка 16 — 15 выборов)."""
         ...
 
     def items_needed(self, params: BaseModel) -> int:

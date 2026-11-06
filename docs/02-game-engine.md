@@ -184,7 +184,7 @@ Source `collection` (`register_collection`) подключается в game н�
 | AnswerFormat | `classic`, `pick` | `pick`: ответ `{option_id}`, один ответ на раунд (загадке — один уровень, `attempts_per_level = 1`) |
 | Source | `marathon` | Единицы выбранных игроком персон (`subject_ids`, ≤ `max_subjects`), раундов `min(пул, rounds)`, порядок `shuffle`/`year` |
 | Source | `pair` | Цепочка «больше/меньше» по `metric`: соседи не равны и отличаются ≥ `min_gap`; `shown` — опорная, `options` — `higher`/`lower` |
-| Source | `bracket` | Сетка 8/16/32 на неделю (`period_start`), посев по seed периода; туры — `followups` из победителей, `size − 1` выборов |
+| Source | `bracket` | Сетка 8/16/32 на неделю (`period_start`), посев по seed периода; туры — `followups` из победителей, `size − 1` выборов. Недельная сетка фильмов: `size 16`, тема — режиссёр с ≥ 24 играбельными фильмами (`min_items ≥ size`), 15 выборов |
 | AnswerMatcher | `metric_compare`, `preference` | Направление метрики против опорной (ничья — `both_correct`); любой выбор верен |
 | Scorer | `streak` (`presentation=streak`), `none` (`bracket`) | `points_per_round` за `exact`; без очков |
 | EndRule | `all_rounds`, `lives` | `lives {count}`: конец после `count` проигранных раундов (всё, кроме `exact` и `void`) |

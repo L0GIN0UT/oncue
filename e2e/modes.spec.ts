@@ -176,7 +176,7 @@ test("больше/меньше: метрика загаданной скрыт�
   await expect(page.getByTestId("final-score")).toHaveText(/\d/);
 });
 
-test("недельная сетка: 31 выбор до чемпиона", async ({ page }) => {
+test("недельная сетка: 15 выборов до чемпиона", async ({ page }) => {
   test.setTimeout(240_000);
   const stats: (number | null)[] = [];
   page.on("response", async (r) => {
@@ -189,11 +189,11 @@ test("недельная сетка: 31 выбор до чемпиона", async
   await expect(page).toHaveURL(/\/play\/s\//);
   const sessionId = sessionIdOf(page);
 
-  // Первый тур — 1/16 (16 пар), варианты — две единицы пары с названиями.
+  // Первый тур — 1/8 (8 пар), варианты — две единицы пары с названиями.
   await expect(page.getByTestId("bracket-stage")).toBeVisible();
   await expect(pickOption(page)).toHaveCount(2);
   const first = await snapshot(page, sessionId);
-  expect(first.rounds).toHaveLength(31);
+  expect(first.rounds).toHaveLength(15);
   expect(first.rounds[0]!.options.every((o) => o.title)).toBe(true);
 
   await Promise.all([
@@ -209,7 +209,7 @@ test("недельная сетка: 31 выбор до чемпиона", async
   const result = (await (await guestApi(page)).get(`/sessions/${sessionId}/result`)).json() as Promise<Json>;
   const bracket = (await result).bracket as { champion: unknown; picks: unknown[] } | null;
   expect(bracket?.champion).toBeTruthy();
-  expect(bracket?.picks).toHaveLength(31);
+  expect(bracket?.picks).toHaveLength(15);
 
   // Одна попытка на период: повторный вход ведёт на итог.
   await page.goto(`/play/${BRACKET}`);

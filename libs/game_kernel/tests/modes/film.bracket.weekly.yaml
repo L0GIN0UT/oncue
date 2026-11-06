@@ -1,17 +1,17 @@
-# Тестовый конфиг ядра: недельная сетка топ-32 (D10). Сиды game (§10 плана) — поток B.
+# Тестовый конфиг ядра: недельная сетка топ-16 (D10). Сиды game (§10 плана) — поток B.
 key: film.bracket.weekly
 title_i18n: modes.film.bracket.weekly.title
 domain: film
 source:
   type: bracket
   params:
-    size: 32
+    size: 16
     period: week
     timezone: Europe/Moscow
     schedule_ahead_periods: 1
     subject:
       roles: [director]
-      min_items: 32
+      min_items: 24
     pool:
       kinds: [film]
 clue:
@@ -29,7 +29,7 @@ scoring:
   params: {}
 session:
   kind: solo
-  rounds: 31
+  rounds: 15
   attempts_per_level: 1
   skip_allowed: false
   give_up_allowed: false

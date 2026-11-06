@@ -304,7 +304,7 @@ async def metric_of(game: Any, item_id: UUID) -> float:
 
 
 # ============================================================== сетка
-async def bracket_pool(game: Any, count: int = 32) -> UUID:
+async def bracket_pool(game: Any, count: int = 24) -> UUID:
     await bootstrap(game)
     director = uuid7()
     for i in range(count):
@@ -331,17 +331,17 @@ async def play_bracket(game: Any, token: str, pick: str = "a") -> tuple[dict[str
     return snap, stats
 
 
-async def test_bracket_31_picks_result_and_reentry(game: Any) -> None:
+async def test_bracket_15_picks_result_and_reentry(game: Any) -> None:
     director = await bracket_pool(game)
     user = game.issuer.issue(user_id=uuid7())
     created = await start(game, user, BRACKET)
     snap = created.json()
-    assert snap["day"] == "2026-10-05" and len(snap["rounds"]) == 31
+    assert snap["day"] == "2026-10-05" and len(snap["rounds"]) == 15
     first = snap["rounds"][0]
     assert [o["option_id"] for o in first["options"]] == ["a", "b"]
     assert all(o["title"].startswith("Фильм сетки") for o in first["options"])
     assert [s["option_id"] for s in first["shown"]] == ["a", "b"]
-    assert first["progress"]["stage"] == 32
+    assert first["progress"]["stage"] == 16
     session = await stored(game, snap["id"])
     assert_hidden(snap, *(p.target for p in session.plan))
 
@@ -353,15 +353,15 @@ async def test_bracket_31_picks_result_and_reentry(game: Any) -> None:
         snap = r.json()["session"]
         if snap["status"] == "active":
             stage = snap["rounds"][snap["current_round"]]["progress"]["stage"]
-            assert stage in {32, 16, 8, 4, 2}
-    assert len(stats) == 31 and all(s == {"agree_pct": 100.0} for s in stats)
+            assert stage in {16, 8, 4, 2}
+    assert len(stats) == 15 and all(s == {"agree_pct": 100.0} for s in stats)
     assert snap["score"] == 0 and snap["max_score"] == 0
 
     result = (
         await game.client.get(f"/v1/sessions/{snap['id']}/result", headers=bearer(user))
     ).json()
     assert result["presentation"] == "bracket" and result["daily_stats"] is None
-    assert len(result["bracket"]["picks"]) == 31
+    assert len(result["bracket"]["picks"]) == 15
     assert [p["stage"] for p in result["bracket"]["picks"]][-3:] == [4, 4, 2]
     assert result["bracket"]["champion"] == result["bracket"]["picks"][-1]["winner"]
 
@@ -373,7 +373,7 @@ async def test_bracket_31_picks_result_and_reentry(game: Any) -> None:
     completed = assert_published(events, "game.BracketCompleted", {"session_id": snap["id"]})
     assert_event_matches_schema(completed)
     assert completed.payload["period_start"] == "2026-10-05"
-    assert len(completed.payload["picks"]) == 31
+    assert len(completed.payload["picks"]) == 15
     assert not [
         e
         for e in events
@@ -400,7 +400,7 @@ async def test_bracket_agree_pct_counts_only_users(game: Any) -> None:
 
 
 async def test_weekly_set_curation_and_theme(game: Any) -> None:
-    director = await bracket_pool(game, 33)
+    director = await bracket_pool(game, 25)
     small = uuid7()
     await game.add_item(domain="film", persons=[(small, "Мало фильмов", "director")])
     headers = game.admin("game.daily.view", "game.daily.curate")
@@ -413,7 +413,7 @@ async def test_weekly_set_curation_and_theme(game: Any) -> None:
     current, ahead = sets.json()
     assert (current["day"], ahead["day"]) == ("2026-10-05", "2026-10-12")
     assert {current["period"], ahead["period"]} == {"week"}
-    assert current["subject_id"] == str(director) and len(current["items"]) == 32
+    assert current["subject_id"] == str(director) and len(current["items"]) == 16
     assert current["mode_version"] == 1
 
     locked = await game.client.put(
