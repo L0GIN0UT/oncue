@@ -18,6 +18,48 @@ async function open() {
   await screen.findByTestId("shop-balance");
 }
 
+describe("ShopView: цена", () => {
+  it("у плитки с ценой рядом с числом значок Версов, а не голая цифра", async () => {
+    await open();
+    const tile = (await screen.findAllByTestId(/^shop-item-/)).find(
+      (el) => el.getAttribute("data-state") === "available",
+    )!;
+    expect(within(tile).getByTestId("tile-verses-icon")).toBeInTheDocument();
+  });
+
+  it("у плитки без картинки — заглушка слота, а не пустой квадрат", async () => {
+    server.use(
+      http.get("*/api/web/v1/pages/shop", () =>
+        HttpResponse.json({
+          blocks: {
+            catalog: {
+              status: "ok",
+              data: {
+                balance: 100,
+                slots: ["frame"],
+                items: [
+                  {
+                    state: "available",
+                    item: { ...itemByKey("fox")!, slot: "frame", key: "f1", asset_url: "" },
+                  },
+                ],
+              },
+            },
+            packs: null,
+          },
+        }),
+      ),
+    );
+    await open();
+    const tile = await screen.findByTestId("shop-item-f1");
+    const placeholder = tile.querySelector("[data-placeholder]")!;
+    expect(placeholder).toHaveAttribute("data-placeholder-kind", "frame");
+    expect(placeholder.querySelector("svg")).not.toBeNull();
+    // Плитка — кнопка с собственным именем; заглушка внутри скрыта от скринридера.
+    expect(placeholder).toHaveAttribute("aria-hidden", "true");
+  });
+});
+
 describe("ShopView: витрина", () => {
   it("чипы слотов — в порядке данных bff, плюс «Мои»; первый слот выбран", async () => {
     await open();

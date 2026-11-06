@@ -1664,6 +1664,9 @@
     "unlockLevel": "Откроется на уровне {level}",
     "price": "{price, plural, one {# Верс} few {# Верса} many {# Версов} other {# Версов}}",
     "free": "Без оплаты",
+    "customAvatar": {
+      "label": "Своя картинка"
+    },
     "empty": "В этом разделе пока ничего нет.",
     "confirm": {
       "title": "Купить «{title}»?",

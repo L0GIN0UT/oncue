@@ -1,6 +1,7 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { CosmeticCard } from "@/shared/api/types";
+import { renderWithProviders } from "@/test/render";
 import { CosmeticImage, safeImageUrl } from "./CosmeticImage";
 
 function mockReducedMotion(reduce: boolean) {
@@ -81,6 +82,93 @@ describe("CosmeticImage", () => {
   it("без window.matchMedia (jsdom) не падает", () => {
     render(<CosmeticImage item={base} />);
     expect(screen.getByRole("img")).toBeInTheDocument();
+  });
+});
+
+describe("CosmeticImage: заглушка без картинки", () => {
+  const noImage = { ...base, asset_url: "" };
+
+  it.each([
+    ["avatar", "avatar"],
+    ["frame", "frame"],
+    ["background", "background"],
+  ])("слот %s: своя иконка, не пустой квадрат", (slot, kind) => {
+    mockReducedMotion(false);
+    render(<CosmeticImage item={{ ...noImage, slot }} />);
+    const placeholder = screen.getByRole("img", { name: "Золотая рамка" });
+    expect(placeholder).toHaveAttribute("data-placeholder-kind", kind);
+    expect(placeholder.querySelector("svg")).not.toBeNull();
+  });
+
+  it("иконки разных слотов различаются", () => {
+    mockReducedMotion(false);
+    const icon = (slot: string) => {
+      const { container, unmount } = render(
+        <CosmeticImage item={{ ...noImage, slot }} decorative />,
+      );
+      const html = container.querySelector("svg")?.getAttribute("class") ?? "";
+      unmount();
+      return html;
+    };
+    expect(new Set([icon("avatar"), icon("frame"), icon("background")]).size).toBe(3);
+  });
+
+  it("слот, которого нет в списке (из конфига): общая иконка, экран не ломается", () => {
+    mockReducedMotion(false);
+    render(<CosmeticImage item={{ ...noImage, slot: "season_banner" }} />);
+    const placeholder = screen.getByRole("img", { name: "Золотая рамка" });
+    expect(placeholder).toHaveAttribute("data-placeholder-kind", "other");
+    expect(placeholder.querySelector("svg")).not.toBeNull();
+  });
+
+  it("декоративная заглушка скрыта от скринридера, у карточки есть доступное имя", () => {
+    mockReducedMotion(false);
+    const { container, unmount } = render(
+      <CosmeticImage item={{ ...noImage, slot: "avatar" }} decorative />,
+    );
+    const hidden = container.querySelector("[data-placeholder]")!;
+    expect(hidden).toHaveAttribute("aria-hidden", "true");
+    expect(hidden).not.toHaveAttribute("aria-label");
+    expect(screen.queryByRole("img")).toBeNull();
+    unmount();
+    render(<CosmeticImage item={{ ...noImage, slot: "avatar" }} />);
+    expect(screen.getByRole("img", { name: "Золотая рамка" })).toBeInTheDocument();
+  });
+
+  it("«Своя аватарка»: иконка загрузки и подпись «Своя картинка», это не сломанная картинка", () => {
+    mockReducedMotion(false);
+    renderWithProviders(
+      <CosmeticImage item={{ ...noImage, slot: "avatar" }} customUpload showLabel />,
+    );
+    const placeholder = screen.getByRole("img", { name: "Золотая рамка" });
+    expect(placeholder).toHaveAttribute("data-placeholder-kind", "custom_avatar");
+    expect(within(placeholder).getByText("Своя картинка")).toBeInTheDocument();
+  });
+
+  it("«Своя аватарка» без подписи (мелкая плитка): только иконка загрузки", () => {
+    mockReducedMotion(false);
+    renderWithProviders(<CosmeticImage item={{ ...noImage, slot: "avatar" }} customUpload />);
+    const placeholder = screen.getByRole("img", { name: "Золотая рамка" });
+    expect(placeholder).toHaveAttribute("data-placeholder-kind", "custom_avatar");
+    expect(screen.queryByText("Своя картинка")).not.toBeInTheDocument();
+  });
+
+  it("animated + reduced-motion без постера: та же заглушка слота", () => {
+    mockReducedMotion(true);
+    render(<CosmeticImage item={{ ...base, slot: "frame", media_kind: "animated" }} />);
+    const placeholder = screen.getByRole("img", { name: "Золотая рамка" });
+    expect(placeholder).toHaveAttribute("data-placeholder-kind", "frame");
+    expect(placeholder.querySelector("svg")).not.toBeNull();
+  });
+
+  it("есть картинка: заглушки нет (ни у слота, ни у «Своей аватарки»)", () => {
+    mockReducedMotion(false);
+    const { container } = renderWithProviders(
+      <CosmeticImage item={{ ...base, slot: "avatar" }} customUpload showLabel />,
+    );
+    expect(container.querySelector("[data-placeholder]")).toBeNull();
+    expect(container.querySelector("img")).not.toBeNull();
+    expect(screen.queryByText("Своя картинка")).not.toBeInTheDocument();
   });
 });
 

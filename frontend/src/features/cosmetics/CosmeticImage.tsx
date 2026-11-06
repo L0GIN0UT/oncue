@@ -3,9 +3,19 @@
  * Картинка косметики (ADR 0046): `static` и `animated` (animated WebP) рисуются `<img>` по
  * `asset_url` с публичного префикса `/cosmetics/`. При `prefers-reduced-motion: reduce` анимация
  * заменяется постером; постера нет — статичная заглушка (первый кадр из WebP недоступен).
- * `alt` — название предмета, загрузка ленивая.
+ * `alt` — название предмета, загрузка ленивая. Нет картинки (нет `asset_url`, небезопасный адрес,
+ * animated без постера при reduced-motion) — заглушка с иконкой слота, а не пустой квадрат.
  */
 import { useSyncExternalStore } from "react";
+import { useTranslations } from "next-intl";
+import {
+  Image as ImageIcon,
+  ImageUp,
+  Sparkles,
+  SquareDashed,
+  User,
+  type LucideIcon,
+} from "lucide-react";
 import type { CosmeticCard } from "@/shared/api/types";
 import { cn } from "@/shared/lib/cn";
 
@@ -43,30 +53,74 @@ export function safeImageUrl(
   return url;
 }
 
+/**
+ * Иконка заглушки по слоту. Слоты — данные (конфиг progression), поэтому неизвестный слот не
+ * ломает экран: у него общая иконка. «Своя аватарка» (право на загрузку) — отдельный вид.
+ */
+const SLOT_ICONS: Record<string, LucideIcon> = {
+  avatar: User,
+  frame: SquareDashed,
+  background: ImageIcon,
+};
+
 type Props = {
-  item: Pick<CosmeticCard, "title" | "media_kind" | "asset_url" | "poster_url">;
+  item: Pick<CosmeticCard, "title" | "media_kind" | "asset_url" | "poster_url"> & {
+    /** Слот предмета: от него зависит иконка заглушки. */
+    slot?: string;
+  };
   className?: string;
   /** Украшение рядом с текстом (рамка, фон): пустой `alt`, заглушка скрыта от скринридеров. */
   decorative?: boolean;
   /** Разрешить blob:-адрес (только превью выбранного файла аватарки). */
   allowBlob?: boolean;
+  /**
+   * Товар «Своя аватарка» (ADR 0048): у него нет картинки по смыслу — это право загрузить свою.
+   * Заглушка с иконкой загрузки, чтобы это не выглядело сломанной картинкой.
+   */
+  customUpload?: boolean;
+  /** Подпись «Своя картинка» под иконкой заглушки `customUpload` (крупные плитки и предпросмотр). */
+  showLabel?: boolean;
 };
 
-export function CosmeticImage({ item, className, decorative = false, allowBlob = false }: Props) {
+function CustomUploadLabel() {
+  const t = useTranslations();
+  return (
+    <span className="px-1 text-center text-xs leading-tight">{t("shop.customAvatar.label")}</span>
+  );
+}
+
+export function CosmeticImage({
+  item,
+  className,
+  decorative = false,
+  allowBlob = false,
+  customUpload = false,
+  showLabel = false,
+}: Props) {
   const reduced = useReducedMotion();
   const wanted =
     item.media_kind === "animated" && reduced ? (item.poster_url ?? null) : item.asset_url;
   const src = safeImageUrl(wanted, { allowBlob });
   if (!src) {
+    const kind = customUpload
+      ? "custom_avatar"
+      : item.slot && item.slot in SLOT_ICONS
+        ? item.slot
+        : "other";
+    const Icon = customUpload ? ImageUp : (SLOT_ICONS[item.slot ?? ""] ?? Sparkles);
     return (
       <span
         {...(decorative ? { "aria-hidden": true } : { role: "img", "aria-label": item.title })}
         data-placeholder="true"
+        data-placeholder-kind={kind}
         className={cn(
-          "block rounded-[var(--radius-control)] border-[1.5px] border-rule bg-stage-raised",
+          "flex flex-col items-center justify-center gap-0.5 rounded-[var(--radius-control)] border-[1.5px] border-rule bg-stage-raised text-ink-dim",
           className,
         )}
-      />
+      >
+        <Icon aria-hidden className="size-1/2 max-h-8 max-w-8" />
+        {customUpload && showLabel && <CustomUploadLabel />}
+      </span>
     );
   }
   return (
