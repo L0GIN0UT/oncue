@@ -245,6 +245,12 @@ export type UgcScenario = {
   likeFailsOnce?: boolean;
   /** Единица заблокирована в каталоге (на полках — `unavailable`). */
   blockedItem?: string;
+  /** Обложки: ссылки из пачки и страниц уже протухли (403), одиночная перевыдача отдаёт рабочую. */
+  staleCovers?: boolean;
+  /** Обложки: ручка covers отвечает 503 (источники недоступны, у карточек остаётся пресет). */
+  coversFail?: boolean;
+  /** Обложки: у карточек нет картинок (`cover_artwork: null`). */
+  noCovers?: boolean;
 };
 
 type Entry = { itemId: string; source: string; addedAt: string };
@@ -255,6 +261,8 @@ export class UgcWorld {
   shelves = new Map<string, Map<string, Entry[]>>();
   customShelves = new Map<string, MockShelf[]>();
   scenario: UgcScenario = {};
+  /** Запросы `POST /v1/collections/covers`: id из каждого тела по порядку. */
+  coverCalls: string[][] = [];
   private seq = 0;
   now: () => Date = () => new Date();
 
@@ -263,6 +271,7 @@ export class UgcWorld {
     this.shelves.clear();
     this.customShelves.clear();
     this.scenario = {};
+    this.coverCalls = [];
     this.seq = 0;
   }
 

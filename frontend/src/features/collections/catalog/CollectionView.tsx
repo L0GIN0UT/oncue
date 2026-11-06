@@ -136,6 +136,8 @@ function CollectionBody({
       <div className="relative min-h-44 md:min-h-0">
         <Cover
           preset={detail.cover?.preset}
+          collectionId={detail.collection_id}
+          artwork={detail.cover_artwork}
           className="absolute inset-0 size-full rounded-none text-8xl ring-0"
         />
         <div className="absolute inset-x-0 bottom-0 flex flex-col gap-1.5 bg-gradient-to-t from-night/90 to-transparent px-[22px] pt-16 pb-[22px]">

@@ -175,6 +175,21 @@ describe("CosmeticImage: заглушка без картинки", () => {
   });
 });
 
+describe("safeImageUrl: /media/ только по явному разрешению", () => {
+  it("по умолчанию /media/ закрыт, с allowMedia пропускается подписанная ссылка", () => {
+    const url = "/media/a/0192.webp?md5=x&expires=1";
+    expect(safeImageUrl(url)).toBeNull();
+    expect(safeImageUrl(url, { allowMedia: true })).toBe(url);
+  });
+
+  it.each(["/media/../api/x", "/media/a\\b.webp", "//evil.com/media/a.webp", "/api/x"])(
+    "allowMedia не пропускает %s",
+    (url) => {
+      expect(safeImageUrl(url, { allowMedia: true })).toBeNull();
+    },
+  );
+});
+
 describe("safeImageUrl", () => {
   it.each(["/cosmetics/fox.webp", "/ugc/avatars/a1.webp"])("пропускает %s", (url) => {
     expect(safeImageUrl(url)).toBe(url);

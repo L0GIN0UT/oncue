@@ -63,6 +63,8 @@ type L = Library["schemas"];
 export type CollectionsPage = B["CollectionsPage"];
 export type CollectionCardOut = B["CollectionCard"];
 export type CollectionPageOut = B["CollectionPage"];
+/** Картинка обложки сборника: подписанная ссылка со сроком (ADR 0079). */
+export type CoverArtwork = B["ResultArtwork"];
 export type CollectionDetailOut = B["CollectionDetail"];
 export type CollectionItemCard = B["CollectionItemCard"];
 export type CollectionModeCard = B["CollectionModeCard"];

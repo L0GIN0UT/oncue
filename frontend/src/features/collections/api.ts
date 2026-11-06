@@ -12,6 +12,7 @@ import type {
   CollectionPageOut,
   CollectionsMeta,
   CollectionsPage,
+  CoverArtwork,
   DraftBody,
   DraftOut,
   FavoriteOut,
@@ -28,6 +29,7 @@ export const collectionKeys = {
   detail: (id: string) => ["collections", "detail", id] as const,
   draft: (id: string) => ["collections", "draft", id] as const,
   mine: ["collections", "mine"] as const,
+  covers: (ids: string[]) => ["collections", "covers", ids] as const,
 };
 
 /** Словари конструктора: лимиты, пресеты обложек, теги (`GET /v1/meta`, меняются редко). */
@@ -80,6 +82,23 @@ export async function fetchCollection(id: string): Promise<CollectionDetail> {
       params: { path: { collection_id: id } },
     }),
   );
+}
+
+/** Максимум id в одном запросе обложек (`GV_PAGES__COVERS_BATCH_MAX`, контракт ADR 0079). */
+export const COVERS_BATCH_MAX = 50;
+
+/** Обложки сборников пачкой (bff): `collection_id` → картинка или `null` (пресет). */
+export async function fetchCollectionCovers(
+  ids: string[],
+  signal?: AbortSignal,
+): Promise<Record<string, CoverArtwork | null>> {
+  const out = unwrap(
+    await api().web.POST("/v1/collections/covers", {
+      body: { collection_ids: ids.slice(0, COVERS_BATCH_MAX) },
+      signal,
+    }),
+  );
+  return Object.fromEntries(out.items.map((i) => [i.collection_id, i.cover_artwork ?? null]));
 }
 
 const key = (k?: string) => ({ header: { "Idempotency-Key": k ?? newIdempotencyKey() } });

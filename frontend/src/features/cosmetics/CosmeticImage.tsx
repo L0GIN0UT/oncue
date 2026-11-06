@@ -42,14 +42,19 @@ export function useReducedMotion(): boolean {
  */
 const ALLOWED_PATH = /^\/(?:cosmetics|ugc)\/[^\\\u0000-\u001f\u007f]+$/;
 
+/** Подписанные ссылки media-pipeline (`/media/…`): обложки сборников, ADR 0079; по умолчанию закрыты. */
+const ALLOWED_MEDIA_PATH = /^\/media\/[^\\\u0000-\u001f\u007f]+$/;
+
 export function safeImageUrl(
   url: string | null | undefined,
-  options: { allowBlob?: boolean } = {},
+  options: { allowBlob?: boolean; allowMedia?: boolean } = {},
 ): string | null {
   if (!url) return null;
   // Превью выбранного файла (URL.createObjectURL) — только там, где это явно разрешено.
   if (options.allowBlob && url.startsWith("blob:")) return url;
-  if (!ALLOWED_PATH.test(url) || url.split("/").includes("..")) return null;
+  const allowed =
+    ALLOWED_PATH.test(url) || (options.allowMedia === true && ALLOWED_MEDIA_PATH.test(url));
+  if (!allowed || url.split("/").includes("..")) return null;
   return url;
 }
 
