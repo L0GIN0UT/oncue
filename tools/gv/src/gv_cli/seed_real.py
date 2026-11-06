@@ -118,7 +118,8 @@ ORIGIN_TRACK = "upload"
 ORIGIN_FILM = "tmdb"
 NOTE_FILM = "TMDB (local, ADR 0014); не для распространения"
 
-# Названия жанровых сборников. Неизвестный жанр получает название «Жанр: <ключ>».
+# Названия жанровых сборников. Неизвестный жанр получает читаемое название («Жанр: Trip hop»),
+# см. genre_title. Ключи — то, что выдаёт fetch_deezer.py (genre_key) и встречается в данных.
 GENRE_TITLES: Mapping[str, str] = {
     "pop": "Поп",
     "hip-hop": "Хип-хоп",
@@ -152,7 +153,40 @@ GENRE_TITLES: Mapping[str, str] = {
     "gospel": "Госпел",
     "opera": "Опера",
     "comedy": "Юмор",
+    "kids": "Детская",
+    "singer-songwriter": "Авторская песня",
+    "cumbia": "Кумбия",
+    "african-music": "Африканская музыка",
+    "asian-music": "Азиатская музыка",
+    "brazilian-music": "Бразильская музыка",
+    "indian-music": "Индийская музыка",
+    "latin-music": "Латино",
+    "rap-hip-hop": "Хип-хоп",
+    "electro": "Электроника",
+    "films-games": "Саундтреки",
+    "soul-funk": "Соул и фанк",
+    "hard-rock": "Хард-рок",
+    "heavy-metal": "Метал",
+    "easy-listening": "Лёгкая музыка",
+    "new-age": "Нью-эйдж",
+    "christian": "Христианская музыка",
+    "religious": "Духовная музыка",
+    "traditional": "Народная музыка",
+    "trip-hop": "Трип-хоп",
+    "house": "Хаус",
+    "techno": "Техно",
 }
+
+
+def genre_title(raw: str) -> str:
+    """Название жанрового сборника: русское из словаря, иначе читаемое «Жанр: Singer songwriter»."""
+    known = GENRE_TITLES.get(raw) or GENRE_TITLES.get(slugify(raw))
+    if known:
+        return known
+    words = re.sub(r"[-_\s]+", " ", raw).strip()
+    return f"Жанр: {words[:1].upper()}{words[1:]}"
+
+
 # Написания жанра из разных источников → общий ключ.
 GENRE_ALIASES: Mapping[str, str] = {"hiphop": "hip-hop", "hip hop": "hip-hop", "r&b": "rnb"}
 MUSIC_COVERS = ("vinyl", "neon", "night", "sunset", "forest", "ocean")
@@ -733,7 +767,7 @@ def music_collections(
     fitting = [(g, u) for g, u in by_genre.items() if len(u) >= min_size]
     fitting.sort(key=lambda gu: (-len(gu[1]), gu[0]))
     for slug, members in fitting:
-        title = GENRE_TITLES.get(names[slug], f"Жанр: {names[slug]}")
+        title = genre_title(names[slug])
         add(
             f"real-music-{slug}",
             title,

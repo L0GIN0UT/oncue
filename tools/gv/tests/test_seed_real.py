@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import threading
 import time
@@ -29,6 +30,7 @@ from gv_cli.seed_real import (
     catalog_row,
     ffmpeg_command,
     film_collections,
+    genre_title,
     import_rows,
     load_film_rows,
     load_track_rows,
@@ -232,6 +234,22 @@ class TestCollections:
     )  # fmt: skip
     def test_deezer_genres_have_titles(self, genre: str) -> None:
         assert genre in GENRE_TITLES
+
+    def test_all_genre_titles_are_russian(self) -> None:
+        allowed_latin = {"R&B", "K-pop"}
+        for key, title in GENRE_TITLES.items():
+            assert title in allowed_latin or not re.search("[A-Za-z]", title), (key, title)
+
+    def test_unknown_genre_title_is_readable(self) -> None:
+        assert genre_title("singer-songwriter") == "Авторская песня"
+        assert genre_title("psy-trance") == "Жанр: Psy trance"
+        assert genre_title("Trip_Hop Beats") == "Жанр: Trip Hop Beats"
+
+    def test_singer_songwriter_collection_is_russian(self) -> None:
+        units = [_track(i, "singer-songwriter") for i in range(21)]
+        titles = [s.title for s in music_collections(units, min_size=20)]
+        assert "Авторская песня" in titles
+        assert not any("singer" in t.lower() for t in titles)
 
     def test_film_collections_top_categories_genres_decades(self) -> None:
         units = [
