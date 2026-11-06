@@ -58,7 +58,11 @@ export const ITEMS: CosmeticCard[] = [
     media_kind: "animated",
     poster_url: "/cosmetics/owl_poster.svg",
   }),
-  cosmetic("custom_avatar", "avatar", "Своя аватарка", "epic", { price: 50 }),
+  cosmetic("custom_avatar", "avatar", "Своя аватарка", "epic", {
+    price: 50,
+    grants_custom_avatar: true,
+    asset_url: "",
+  }),
   cosmetic("gold_frame", "frame", "Золотая рамка", "rare", { price: 30, level_required: 5 }),
   cosmetic("neon_frame", "frame", "Неоновая рамка", "epic", {
     price: 100,

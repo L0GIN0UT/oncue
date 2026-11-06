@@ -64,7 +64,12 @@ export function ItemTile({
       <CosmeticImage
         item={item}
         decorative
-        className={cn("size-14 rounded-full object-cover", state === "locked" && "opacity-50")}
+        showLabel
+        className={cn(
+          "size-14 object-cover",
+          item.grants_custom_avatar ? "rounded-2xl" : "rounded-full",
+          state === "locked" && "opacity-50",
+        )}
       />
       <span
         aria-hidden

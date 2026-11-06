@@ -136,22 +136,24 @@ describe("CosmeticImage: заглушка без картинки", () => {
     expect(screen.getByRole("img", { name: "Золотая рамка" })).toBeInTheDocument();
   });
 
-  it("«Своя аватарка»: иконка загрузки и подпись «Своя картинка», это не сломанная картинка", () => {
+  it("«Своя аватарка»: иконка загрузки и подпись «Загрузите свою», это не сломанная картинка", () => {
     mockReducedMotion(false);
     renderWithProviders(
-      <CosmeticImage item={{ ...noImage, slot: "avatar" }} customUpload showLabel />,
+      <CosmeticImage item={{ ...noImage, slot: "avatar", grants_custom_avatar: true }} showLabel />,
     );
     const placeholder = screen.getByRole("img", { name: "Золотая рамка" });
     expect(placeholder).toHaveAttribute("data-placeholder-kind", "custom_avatar");
-    expect(within(placeholder).getByText("Своя картинка")).toBeInTheDocument();
+    expect(within(placeholder).getByText("Загрузите свою")).toBeInTheDocument();
   });
 
   it("«Своя аватарка» без подписи (мелкая плитка): только иконка загрузки", () => {
     mockReducedMotion(false);
-    renderWithProviders(<CosmeticImage item={{ ...noImage, slot: "avatar" }} customUpload />);
+    renderWithProviders(
+      <CosmeticImage item={{ ...noImage, slot: "avatar", grants_custom_avatar: true }} />,
+    );
     const placeholder = screen.getByRole("img", { name: "Золотая рамка" });
     expect(placeholder).toHaveAttribute("data-placeholder-kind", "custom_avatar");
-    expect(screen.queryByText("Своя картинка")).not.toBeInTheDocument();
+    expect(screen.queryByText("Загрузите свою")).not.toBeInTheDocument();
   });
 
   it("animated + reduced-motion без постера: та же заглушка слота", () => {
@@ -165,11 +167,11 @@ describe("CosmeticImage: заглушка без картинки", () => {
   it("есть картинка: заглушки нет (ни у слота, ни у «Своей аватарки»)", () => {
     mockReducedMotion(false);
     const { container } = renderWithProviders(
-      <CosmeticImage item={{ ...base, slot: "avatar" }} customUpload showLabel />,
+      <CosmeticImage item={{ ...base, slot: "avatar", grants_custom_avatar: true }} showLabel />,
     );
     expect(container.querySelector("[data-placeholder]")).toBeNull();
     expect(container.querySelector("img")).not.toBeNull();
-    expect(screen.queryByText("Своя картинка")).not.toBeInTheDocument();
+    expect(screen.queryByText("Загрузите свою")).not.toBeInTheDocument();
   });
 });
 

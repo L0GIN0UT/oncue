@@ -1665,7 +1665,7 @@
     "price": "{price, plural, one {# Верс} few {# Верса} many {# Версов} other {# Версов}}",
     "free": "Без оплаты",
     "customAvatar": {
-      "label": "Своя картинка"
+      "label": "Загрузите свою"
     },
     "empty": "В этом разделе пока ничего нет.",
     "confirm": {
