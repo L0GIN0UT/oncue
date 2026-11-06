@@ -3,7 +3,7 @@
  * чтобы повтор воспроизведения не требовал новой ссылки. Ошибка скачивания — повторная выдача
  * (не больше двух раз); ответы сервера 4xx не повторяются.
  */
-import { useQuery, useQueryClient, type Query } from "@tanstack/react-query";
+import { useQuery, useQueryClient, type Query, type QueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { api, unwrap } from "@/shared/api/client";
 import { NetworkError } from "@/shared/api/errors";
@@ -21,6 +21,8 @@ export async function loadClue(
   sessionId: string,
   roundIndex: number,
   level: number,
+  /** Файл, уже скачанный по `next_round_first_clue`: запрос выдачи остаётся (он стартует таймер). */
+  preloaded?: Blob,
 ): Promise<LoadedClue> {
   const clue = unwrap<ClueOut>(
     await api().game.POST("/v1/sessions/{session_id}/rounds/{index}/clue", {
@@ -28,8 +30,33 @@ export async function loadClue(
       body: { level },
     }),
   );
-  const blob = await downloadAsset(clue.url);
+  const blob = preloaded ?? (await downloadAsset(clue.url));
   return { ...clue, objectUrl: URL.createObjectURL(blob), blob };
+}
+
+/** Предзагруженный файл уровня (`blob` без выдачи): ключ в кэше запросов. */
+export const preloadKey = (sessionId: string, roundIndex: number, level: number) =>
+  ["clue-preload", sessionId, roundIndex, level] as const;
+
+/**
+ * Скачать файл уровня 1 следующего раунда заранее (`next_round_first_clue`), пока открыт ответ
+ * раунда. Ссылка раунд не открывает и таймер не запускает: следующий раунд стартует обычным
+ * `POST .../clue`, который найдёт файл здесь и не будет качать его снова. Это лишь ускорение:
+ * любая ошибка молча игнорируется — раунд тогда стартует как раньше, с обычным скачиванием.
+ */
+export async function preloadClue(
+  client: QueryClient,
+  sessionId: string,
+  roundIndex: number,
+  clue: Pick<ClueOut, "url" | "level">,
+): Promise<void> {
+  const key = preloadKey(sessionId, roundIndex, clue.level);
+  if (client.getQueryData(key) !== undefined) return;
+  try {
+    client.setQueryData(key, await downloadAsset(clue.url));
+  } catch {
+    /* предзагрузка необязательна */
+  }
 }
 
 export const clueKey = (sessionId: string, roundIndex: number, level: number) =>
@@ -47,10 +74,17 @@ function keepWithinRound(sessionId: string, roundIndex: number | null) {
 }
 
 export function useClue(sessionId: string, roundIndex: number | null, level: number | null) {
+  const client = useQueryClient();
   return useQuery({
     placeholderData: keepWithinRound(sessionId, roundIndex),
     queryKey: clueKey(sessionId, roundIndex ?? -1, level ?? -1),
-    queryFn: () => loadClue(sessionId, roundIndex!, level!),
+    queryFn: () => {
+      // Файл мог быть скачан заранее; берём его один раз, выдача (таймер) всё равно идёт.
+      const key = preloadKey(sessionId, roundIndex!, level!);
+      const preloaded = client.getQueryData<Blob>(key);
+      client.removeQueries({ queryKey: key });
+      return loadClue(sessionId, roundIndex!, level!, preloaded);
+    },
     enabled: roundIndex !== null && level !== null,
     staleTime: Infinity,
     gcTime: 15 * 60_000,
@@ -70,6 +104,7 @@ export function useReleaseClues(sessionId: string): void {
         if (data) URL.revokeObjectURL(data.objectUrl);
       }
       client.removeQueries({ queryKey: ["clue", sessionId] });
+      client.removeQueries({ queryKey: ["clue-preload", sessionId] });
     },
     [client, sessionId],
   );
