@@ -110,9 +110,14 @@ test("дуэль: лобби → готовность → матч → «Соп�
   await expect(rival.getByTestId("reveal-title")).toHaveText("Группа крови");
   await expect(page.getByTestId("player-player").getByTestId("player-score")).toContainText("12");
 
-  // Эмоция видна сопернику пузырём.
-  await rival.getByTestId("emote-match.emotes.gg").click();
-  await expect(page.getByTestId("player-rival").getByTestId("emote-bubble")).toHaveText("🤝 GG");
+  // Эмоция видна сопернику пузырём. Эмоция живёт только дельтой канала: если у хоста в этот момент
+  // шёл ресинк по снимку (смена фазы, tick), дельта в снимок не попадает и пузырь не появится —
+  // для живого игрока это штатно (он нажмёт ещё раз), поэтому тест отправляет эмоцию повторно.
+  const bubble = page.getByTestId("player-rival").getByTestId("emote-bubble");
+  await expect(async () => {
+    await rival.getByTestId("emote-match.emotes.gg").click();
+    await expect(bubble).toHaveText("🤝 GG", { timeout: 2_000 });
+  }).toPass({ timeout: 20_000 });
 
   // «Отошёл / Вернулся»: отметка видна сопернику.
   // Кнопка берёт состояние из своего слота: возврат жмём, когда соперник уже получил свою дельту.
