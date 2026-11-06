@@ -28,7 +28,7 @@ def build_routers(infra: Infrastructure, adapters: MediaAdapters | None = None) 
     # Ленивое соединение RabbitMQ закрывает Infrastructure.close (container_for → add_closer).
     return [
         build_public_router(infra),
-        build_internal_router(c.issue_link, c.list_sets, c.ugc),
+        build_internal_router(c.issue_link, c.list_sets, c.ugc, c.issue_cover_links),
         build_admin_router(
             upload=c.upload,
             set_position=c.set_position,

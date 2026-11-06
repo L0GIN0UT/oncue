@@ -12,7 +12,7 @@ from datetime import date, datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field, JsonValue
+from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
 Domain = Literal["music", "film"]
 AnswerFormat = Literal["classic", "pick"]
@@ -920,6 +920,14 @@ class CollectionCard(BaseModel):
     difficulty: Difficulty | None = None
     featured: bool = False
     published_at: datetime
+    cover_artwork: ResultArtwork | None = Field(
+        default=None,
+        description=(
+            "Картинка (artwork) первой единицы публичного сборника: подписанная ссылка со "
+            "сроком, стабильная в пределах окна выдачи. `null` - сборник закрытый, без "
+            "картинки либо источник обложек недоступен: показывайте пресет `cover`."
+        ),
+    )
 
 
 class CollectionResults(BaseModel):
@@ -933,6 +941,27 @@ class CollectionResults(BaseModel):
             "(с теми же фильтрами) вернёт блок `results`; null — дальше пусто"
         ),
     )
+
+
+class CollectionCoversRequest(BaseModel):
+    """Какие сборники нужны (дубли схлопываются; предел - `GV_PAGES__COVERS_BATCH_MAX`)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    collection_ids: list[UUID] = Field(min_length=1, max_length=50)
+
+
+class CollectionCoverItem(BaseModel):
+    """Обложка одного сборника."""
+
+    collection_id: UUID
+    cover_artwork: ResultArtwork | None = None
+
+
+class CollectionCoversOut(BaseModel):
+    """Обложки запрошенных сборников; для закрытых и без картинки - `cover_artwork: null`."""
+
+    items: list[CollectionCoverItem]
 
 
 class CollectionsBlocks(BaseModel):

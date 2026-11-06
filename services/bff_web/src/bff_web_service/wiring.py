@@ -11,7 +11,9 @@ import structlog
 from bff_web_service.api.deps import BffDeps
 from bff_web_service.application.ports import PageCache, ServiceTokens
 from bff_web_service.application.queries import (
+    CollectionCovers,
     EventsContext,
+    GetCollectionCovers,
     GetCollectionPage,
     GetCollectionsPage,
     GetEventPage,
@@ -44,6 +46,7 @@ from bff_web_service.infrastructure.clients import (
     HttpIdentityClient,
     HttpLibraryClient,
     HttpMatchClient,
+    HttpMediaClient,
     HttpNotificationsClient,
     HttpProgressionClient,
     HttpRatingClient,
@@ -77,6 +80,20 @@ def _game_tokens(infra: Infrastructure) -> ServiceTokens | None:
         return build_service_token_provider(infra, "game")
     except ServiceAuthNotConfiguredError:
         log.warning("bff.service_auth_not_configured", audience="game")
+        return None
+
+
+def _covers_tokens(infra: Infrastructure, audience: str) -> ServiceTokens | None:
+    """Сервисный токен bff_web → collections (``covers.read``) или media_pipeline.
+
+    Для media_pipeline область - ``assets.cover_link``.
+
+    Не настроен - ``None``: обложек нет (``cover_artwork: null``), остальное работает.
+    """
+    try:
+        return build_service_token_provider(infra, audience)
+    except ServiceAuthNotConfiguredError:
+        log.warning("bff.service_auth_not_configured", audience=audience)
         return None
 
 
@@ -118,6 +135,17 @@ def build_deps(infra: Infrastructure) -> BffDeps:
         upstream("collections", up.collections_url),
         catalog_ttl_s=pc.collections_ttl_s,
         cache_prefix=pc.key_prefix,
+        service_tokens=_covers_tokens(infra, "collections"),
+    )
+    media = HttpMediaClient(
+        upstream("media_pipeline", up.media_pipeline_url),
+        service_tokens=_covers_tokens(infra, "media_pipeline"),
+    )
+    covers = CollectionCovers(
+        collections,
+        media,
+        batch_max=settings.pages.covers_batch_max,
+        deadline_s=settings.pages.covers_deadline_s,
     )
     library = HttpLibraryClient(upstream("library", up.library_url))
     match = HttpMatchClient(upstream("match", up.match_url))
@@ -211,13 +239,16 @@ def build_deps(infra: Infrastructure) -> BffDeps:
             concurrency=up.max_concurrency,
             showcase_limit=pages.collections_showcase_limit,
             results_limit=pages.collections_results_limit,
+            covers=covers,
         ),
+        get_collection_covers=GetCollectionCovers(covers, batch_max=pages.covers_batch_max),
         get_collection=GetCollectionPage(
             collections,
             game,
             social=social,
             concurrency=up.max_concurrency,
             comments_limit=pages.comments_limit,
+            covers=covers,
         ),
         get_library=GetLibraryPage(library, concurrency=up.max_concurrency),
         get_library_shelf=GetLibraryShelfPage(

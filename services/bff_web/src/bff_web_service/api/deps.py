@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from bff_web_service.application.queries import (
+    GetCollectionCovers,
     GetCollectionPage,
     GetCollectionsPage,
     GetEventPage,
@@ -36,6 +37,7 @@ class BffDeps:
     get_results: GetResultsPage
     get_collections: GetCollectionsPage
     get_collection: GetCollectionPage
+    get_collection_covers: GetCollectionCovers
     get_library: GetLibraryPage
     get_library_shelf: GetLibraryShelfPage
     get_online: GetOnlinePage

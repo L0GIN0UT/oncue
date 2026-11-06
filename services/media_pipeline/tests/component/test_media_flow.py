@@ -1584,3 +1584,92 @@ async def test_admin_replan_schedules_missing_set_on_real_db(service: Service) -
     (rebuilt,) = listed.json()
     assert rebuilt["status"] == "ready"
     assert rebuilt["asset_set_id"] != asset_set["asset_set_id"]
+
+
+# ---------------------------------------------------------------- обложки карточек (cover-links)
+async def _artwork_item(service: Service) -> str:
+    created = load_example("catalog.MediaItemCreated", fresh_id=False)
+    assert await service.deliver(created) is Outcome.PROCESSED
+    assert await service.run_tasks() == 2  # poster_masked + artwork
+    return str(created.payload["media_item_id"])
+
+
+def _covers_auth(service: Service, scopes: list[str] | None = None) -> dict[str, str]:
+    token = service.issuer.issue_service(
+        "bff_web", "media_pipeline", scopes or ["assets.cover_link"]
+    )
+    return {"authorization": f"Bearer {token}"}
+
+
+@pytest.mark.parametrize("service", [{"with_artwork": True}], indirect=True)
+async def test_cover_links_are_signed_stable_and_aligned_to_the_window(service: Service) -> None:
+    item_id = await _artwork_item(service)
+    body = {"media_item_ids": [item_id, str(uuid7())]}  # вторая единица неизвестна
+
+    first = await service.client.post(
+        "/internal/v1/cover-links", json=body, headers=_covers_auth(service)
+    )
+    second = await service.client.post(
+        "/internal/v1/cover-links", json=body, headers=_covers_auth(service)
+    )
+
+    assert first.status_code == 200, first.text
+    [cover] = first.json()["items"]  # неизвестная единица пропущена, не 404
+    assert cover["media_item_id"] == item_id and cover["mime"] == "image/webp"
+    url = urlsplit(cover["url"])
+    assert url.path.startswith("/media/a/")
+    expires = int(parse_qs(url.query)["expires"][0])
+    assert expires % 3600 == 0  # граница окна (по умолчанию час)
+    assert datetime.fromisoformat(cover["expires_at"]).timestamp() == expires
+    assert 3600 - 5 <= expires - int(datetime.now(UTC).timestamp()) <= 7200 + 5
+    assert second.json() == first.json()  # в окне ссылка одна и та же (кэш браузера и bff)
+
+
+@pytest.mark.parametrize("service", [{"with_artwork": True}], indirect=True)
+async def test_cover_links_need_their_own_scope(service: Service) -> None:
+    item_id = await _artwork_item(service)
+    body = {"media_item_ids": [item_id]}
+
+    # токен game (assets.link) обложки не выдаёт
+    game = await service.client.post("/internal/v1/cover-links", json=body)
+    assert_problem(game, 403, "auth.forbidden")
+    # и наоборот: токен bff_web не выдаёт ссылки на уровни ответа
+    bff = service.client.build_request(
+        "POST",
+        "/internal/v1/asset-links",
+        json={"asset_set_id": str(uuid7()), "level": 1, "subject": "sess:x"},
+        headers=_covers_auth(service),
+    )
+    assert_problem(await service.client.send(bff), 403, "auth.forbidden")
+    # без токена
+    anon = service.client.build_request("POST", "/internal/v1/cover-links", json=body)
+    anon.extensions["no_service_token"] = True
+    assert_problem(await service.client.send(anon), 401, "auth.unauthenticated")
+
+
+async def test_cover_links_skip_items_without_artwork(service: Service) -> None:
+    asset_set = await _ready_poster(service)  # профиль без artwork: набор только poster_masked
+
+    response = await service.client.post(
+        "/internal/v1/cover-links",
+        json={"media_item_ids": [asset_set["media_item_id"]]},
+        headers=_covers_auth(service),
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json() == {"items": []}
+
+
+async def test_cover_links_reject_empty_and_oversized_batches(service: Service) -> None:
+    empty = await service.client.post(
+        "/internal/v1/cover-links", json={"media_item_ids": []}, headers=_covers_auth(service)
+    )
+    assert empty.status_code == 422
+
+    too_many = [str(uuid7()) for _ in range(51)]  # лимит по умолчанию - 50
+    response = await service.client.post(
+        "/internal/v1/cover-links",
+        json={"media_item_ids": too_many},
+        headers=_covers_auth(service),
+    )
+    assert_problem(response, 422, "cover.batch_too_large")

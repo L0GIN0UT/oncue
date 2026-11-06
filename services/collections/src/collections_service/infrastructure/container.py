@@ -154,6 +154,7 @@ class CollectionsContainer:
             self.meta,
             self.adapters.limiter,
             search_per_min=self.settings.collections.limits.search_per_min,
+            cover_ids_max=self.settings.collections.covers.max_ids,
         )
 
     @cached_property

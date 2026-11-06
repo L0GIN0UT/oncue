@@ -895,6 +895,65 @@
         "title": "Cover",
         "type": "object"
       },
+      "CoverItem": {
+        "description": "Первая по ``position`` единица сборника.",
+        "properties": {
+          "collection_id": {
+            "format": "uuid",
+            "title": "Collection Id",
+            "type": "string"
+          },
+          "media_item_id": {
+            "format": "uuid",
+            "title": "Media Item Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "collection_id",
+          "media_item_id"
+        ],
+        "title": "CoverItem",
+        "type": "object"
+      },
+      "CoverItemsOut": {
+        "description": "Только опубликованные публичные сборники с составом; остальных в ответе нет.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CoverItem"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "CoverItemsOut",
+        "type": "object"
+      },
+      "CoverItemsRequest": {
+        "additionalProperties": false,
+        "description": "Какие сборники спрашиваем (дубли схлопываются).",
+        "properties": {
+          "collection_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 200,
+            "minItems": 1,
+            "title": "Collection Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "collection_ids"
+        ],
+        "title": "CoverItemsRequest",
+        "type": "object"
+      },
       "CoverOut": {
         "description": "Обложка сборника.",
         "properties": {
@@ -3270,6 +3329,98 @@
         "summary": "Показать скрытый сборник",
         "tags": [
           "admin"
+        ]
+      }
+    },
+    "/internal/v1/cover-items": {
+      "post": {
+        "description": "Для bff_web: `media_item_id` первой по `position` единицы каждого опубликованного ПУБЛИЧНОГО сборника из списка. Приватные (`unlisted`), черновики, скрытые, удалённые и несуществующие сборники в ответ не попадают (без различия). Не больше `GV_COLLECTIONS__COVERS__MAX_IDS` сборников (422 `collections.too_many_ids`, `details.given/max`). Сервисный токен с областью `covers.read` (audience = collections).",
+        "operationId": "cover_items_internal_v1_cover_items_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CoverItemsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CoverItemsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Зависимость временно недоступна"
+          }
+        },
+        "summary": "Первая единица публичных сборников (для обложек карточек)",
+        "tags": [
+          "internal"
         ]
       }
     },

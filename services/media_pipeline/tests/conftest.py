@@ -774,6 +774,7 @@ class MediaHarness:
         )
         from media_pipeline_service.application.commands.links import (
             IssueAssetLink,
+            IssueCoverLinks,
             PurgeLinkJournal,
         )
         from media_pipeline_service.application.commands.profiles import (
@@ -799,7 +800,7 @@ class MediaHarness:
         from media_pipeline_service.application.queries.asset_sets import ListAssetSets
         from media_pipeline_service.application.queries.profiles import ListProfiles
         from media_pipeline_service.application.sources import SourceIngestor
-        from media_pipeline_service.domain.links import LinkPolicy
+        from media_pipeline_service.domain.links import CoverLinkPolicy, LinkPolicy
         from media_pipeline_service.domain.sources import SourceKind
 
         from gv_testkit import FakeClock, InMemoryTaskQueue
@@ -932,6 +933,9 @@ class MediaHarness:
             FakeSigner(),
             self.limiter,
             self.policy,
+        )
+        self.issue_cover_links = IssueCoverLinks(
+            uow, self.clock, FakeSigner(), CoverLinkPolicy(window_s=3600, batch_max=50)
         )
         self.purge_links = PurgeLinkJournal(uow, self.clock, retention=timedelta(days=7), batch=2)
         self.list_sets = ListAssetSets(uow)

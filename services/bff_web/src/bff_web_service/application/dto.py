@@ -660,6 +660,7 @@ class CollectionCard:
     difficulty: Difficulty | None = None
     featured: bool = False
     published_at: datetime
+    cover_artwork: MediaLink | None = None
 
 
 @dataclass(frozen=True, slots=True)

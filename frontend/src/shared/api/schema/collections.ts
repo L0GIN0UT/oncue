@@ -138,6 +138,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/internal/v1/cover-items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Первая единица публичных сборников (для обложек карточек)
+         * @description Для bff_web: `media_item_id` первой по `position` единицы каждого опубликованного ПУБЛИЧНОГО сборника из списка. Приватные (`unlisted`), черновики, скрытые, удалённые и несуществующие сборники в ответ не попадают (без различия). Не больше `GV_COLLECTIONS__COVERS__MAX_IDS` сборников (422 `collections.too_many_ids`, `details.given/max`). Сервисный токен с областью `covers.read` (audience = collections).
+         */
+        post: operations["cover_items_internal_v1_cover_items_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/collections": {
         parameters: {
             query?: never;
@@ -678,6 +698,38 @@ export interface components {
         Cover: {
             /** Preset */
             preset: string;
+        };
+        /**
+         * CoverItem
+         * @description Первая по ``position`` единица сборника.
+         */
+        CoverItem: {
+            /**
+             * Collection Id
+             * Format: uuid
+             */
+            collection_id: string;
+            /**
+             * Media Item Id
+             * Format: uuid
+             */
+            media_item_id: string;
+        };
+        /**
+         * CoverItemsOut
+         * @description Только опубликованные публичные сборники с составом; остальных в ответе нет.
+         */
+        CoverItemsOut: {
+            /** Items */
+            items: components["schemas"]["CoverItem"][];
+        };
+        /**
+         * CoverItemsRequest
+         * @description Какие сборники спрашиваем (дубли схлопываются).
+         */
+        CoverItemsRequest: {
+            /** Collection Ids */
+            collection_ids: string[];
         };
         /**
          * CoverOut
@@ -1891,6 +1943,70 @@ export interface operations {
             };
             /** @description Некорректные данные */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    cover_items_internal_v1_cover_items_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CoverItemsRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CoverItemsOut"];
+                };
+            };
+            /** @description Не аутентифицирован */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Некорректные данные */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Зависимость временно недоступна */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

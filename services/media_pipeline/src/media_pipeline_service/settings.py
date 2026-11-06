@@ -35,6 +35,10 @@ class MediaSettings(BaseModel):
     link_ttl_s: int = Field(default=60, ge=1, le=3600)
     link_max_per_window: int = Field(default=10, ge=1)
     link_window_s: int = Field(default=60, ge=1)
+    # Обложки карточек каталога: окно подписи (expires кратен окну, ссылка живёт окно..2 окна)
+    # и размер пакета. Не секреты: картинка ответа без привязки к игроку.
+    cover_link_window_s: int = Field(default=3600, ge=60, le=86_400)
+    cover_link_batch_max: int = Field(default=50, ge=1, le=200)
     link_issuance_retention_days: int = Field(default=7, ge=1)
     # Задача relay ``media.link_issuance.purge``: пауза между запусками, джиттер, порция.
     link_purge_interval_s: float = Field(default=600, gt=0)

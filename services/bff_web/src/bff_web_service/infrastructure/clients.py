@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from datetime import date, datetime
-from typing import Literal
+from typing import Any, Literal
 from urllib.parse import urlencode
 from uuid import UUID
 
@@ -759,6 +759,16 @@ class _DetailIn(_CardIn):
         )
 
 
+class _CoverItemIn(_In):
+    collection_id: UUID
+    media_item_id: UUID
+
+
+class _CoverItemsIn(_In):
+    items: list[_CoverItemIn]
+
+
+_COVER_ITEMS = TypeAdapter(_CoverItemsIn)
 _COLLECTION_LIST = TypeAdapter(_CollectionListIn)
 _DETAIL = TypeAdapter(_DetailIn)
 
@@ -786,8 +796,33 @@ class HttpCollectionsClient:
     кэшируется.
     """
 
-    def __init__(self, http: UpstreamHttp, *, catalog_ttl_s: int, cache_prefix: str) -> None:
+    def __init__(
+        self,
+        http: UpstreamHttp,
+        *,
+        catalog_ttl_s: int,
+        cache_prefix: str,
+        service_tokens: ServiceTokens | None = None,
+    ) -> None:
         self._http, self._ttl, self._prefix = http, catalog_ttl_s, cache_prefix
+        self._service_tokens = service_tokens
+
+    async def cover_items(self, collection_ids: Sequence[UUID]) -> dict[UUID, UUID]:
+        """``POST /internal/v1/cover-items`` под сервисным токеном bff_web (``covers.read``).
+
+        Возвращает первую единицу только тех сборников, о которых спросили (чужие id из
+        ответа - нарушение контракта).
+        """
+        body = await _post_with_service_token(
+            self._http,
+            self._service_tokens,
+            "/internal/v1/cover-items",
+            {"collection_ids": [str(i) for i in collection_ids]},
+        )
+        items = _parse(self._http.service, _COVER_ITEMS, body).items
+        if not {i.collection_id for i in items} <= set(collection_ids):
+            raise UpstreamUnavailableError(self._http.service, "contract_violation")
+        return {i.collection_id: i.media_item_id for i in items}
 
     async def catalog(self, query: CatalogQuery) -> CollectionList:
         """``GET /v1/collections``."""
@@ -810,6 +845,64 @@ class HttpCollectionsClient:
         if detail.collection_id != collection_id:
             raise UpstreamUnavailableError(self._http.service, "contract_violation")
         return detail.detail()
+
+
+# ----------------------------------------------------------------------------- media-pipeline
+class _CoverLinkIn(_In):
+    media_item_id: UUID
+    url: str
+    expires_at: datetime
+    mime: str
+
+
+class _CoverLinksIn(_In):
+    items: list[_CoverLinkIn]
+
+
+_COVER_LINKS = TypeAdapter(_CoverLinksIn)
+
+
+class HttpMediaClient:
+    """Internal API media-pipeline: пакетные ссылки на обложки (``assets.cover_link``)."""
+
+    def __init__(self, http: UpstreamHttp, *, service_tokens: ServiceTokens | None = None) -> None:
+        self._http, self._service_tokens = http, service_tokens
+
+    async def cover_links(self, media_item_ids: Sequence[UUID]) -> dict[UUID, MediaLink]:
+        """``POST /internal/v1/cover-links``: ссылки только для единиц с готовой картинкой."""
+        body = await _post_with_service_token(
+            self._http,
+            self._service_tokens,
+            "/internal/v1/cover-links",
+            {"media_item_ids": [str(i) for i in media_item_ids]},
+        )
+        items = _parse(self._http.service, _COVER_LINKS, body).items
+        if not {i.media_item_id for i in items} <= set(media_item_ids):
+            raise UpstreamUnavailableError(self._http.service, "contract_violation")
+        return {i.media_item_id: MediaLink(i.url, i.expires_at, i.mime) for i in items}
+
+
+async def _post_with_service_token(
+    http: UpstreamHttp, tokens: ServiceTokens | None, path: str, payload: dict[str, Any]
+) -> bytes:
+    """POST под сервисным токеном bff_web; 401 источника сбрасывает кэш токена.
+
+    Raises:
+        UpstreamUnavailableError: токен не настроен/не получен либо источник недоступен.
+        UpstreamRejectedError: источник отказал (403 - у клиента нет области).
+    """
+    if tokens is None:
+        raise UpstreamUnavailableError(http.service, "service_auth_not_configured")
+    try:
+        token = await tokens.token()
+    except DependencyUnavailableError as exc:
+        raise UpstreamUnavailableError(http.service, "service_token_unavailable") from exc
+    try:
+        return await http.post_json(path, token=token, body=payload)
+    except UpstreamRejectedError as exc:
+        if exc.status == HTTP_UNAUTHORIZED:
+            tokens.invalidate()
+        raise
 
 
 # ----------------------------------------------------------------------------- library

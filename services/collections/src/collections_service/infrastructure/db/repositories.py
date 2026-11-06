@@ -903,6 +903,29 @@ class SqlCatalogReads:
         rows = await self._s.execute(catalog_statement(query))
         return [_to_row(r) for r in rows.mappings()]
 
+    async def cover_items(self, collection_ids: Sequence[UUID]) -> list[tuple[UUID, UUID]]:
+        """Первая единица опубликованных публичных сборников (минимальная позиция)."""
+        if not collection_ids:
+            return []
+        ci = collection_items
+        first = (
+            select(ci.c.collection_id, func.min(ci.c.position).label("position"))
+            .where(ci.c.collection_id.in_(collection_ids))
+            .group_by(ci.c.collection_id)
+            .subquery()
+        )
+        rows = await self._s.execute(
+            select(ci.c.collection_id, ci.c.media_item_id)
+            .select_from(ci)
+            .join(
+                first,
+                (first.c.collection_id == ci.c.collection_id) & (first.c.position == ci.c.position),
+            )
+            .join(_c, _c.c.id == ci.c.collection_id)
+            .where(_c.c.status == "published", _c.c.visibility == "public")
+        )
+        return [(r.collection_id, r.media_item_id) for r in rows]
+
     async def favorites(
         self, user_id: UUID, *, after: tuple[datetime, UUID] | None, limit: int
     ) -> list[tuple[CollectionRow, datetime]]:

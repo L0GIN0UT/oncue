@@ -12,7 +12,7 @@ class UpstreamSettings(BaseModel):
 
     Attributes:
         game_url / catalog_url / identity_url / collections_url / library_url / match_url /
-        rating_url / progression_url / notifications_url / social_url:
+        rating_url / progression_url / notifications_url / social_url / media_pipeline_url:
             Внутренние адреса (``GV_UPSTREAMS__GAME_URL``, ``GV_UPSTREAMS__MATCH_URL`` …).
         timeout_s: Общий таймаут одного вызова: медленный источник не держит страницу.
         max_concurrency: Одновременных вызовов на один запрос страницы.
@@ -33,6 +33,7 @@ class UpstreamSettings(BaseModel):
     progression_url: str = "http://progression:8000"
     notifications_url: str = "http://notifications:8000"
     social_url: str = "http://social:8000"
+    media_pipeline_url: str = "http://media-pipeline:8000"
     timeout_s: float = Field(default=1.5, gt=0, le=30)
     max_concurrency: int = Field(default=10, ge=1, le=100)
     breaker_failures: int = Field(default=5, ge=1)
@@ -95,6 +96,11 @@ class PagesSettings(BaseModel):
         collections_showcase_limit: Карточек в каждой витрине каталога сборников
             (``featured``, ``popular``, ``new``).
         collections_results_limit: Карточек на странице результатов поиска сборников.
+        covers_batch_max: Сколько сборников можно спросить за раз у ``POST /v1/collections/covers``
+            (не больше пределов collections ``GV_COLLECTIONS__COVERS__MAX_IDS`` и media-pipeline
+            ``GV_MEDIA__COVER_LINK_BATCH_MAX``, по умолчанию 50 у обоих).
+        covers_deadline_s: Общий срок двух вызовов за обложками карточек (collections, затем
+            media-pipeline); не успел - ``cover_artwork: null``, страница не страдает.
         library_items_limit: Единиц на странице полки медиатеки.
         online_rooms_limit: Открытых лобби в блоке хаба онлайна (дальше — курсор match).
         online_matches_limit: Последних матчей в блоке «Мои матчи» хаба онлайна.
@@ -146,6 +152,8 @@ class PagesSettings(BaseModel):
     collection_source_types: tuple[str, ...] = ("collection",)
     collections_showcase_limit: int = Field(default=12, ge=1, le=50)
     collections_results_limit: int = Field(default=20, ge=1, le=50)
+    covers_batch_max: int = Field(default=50, ge=1, le=50)
+    covers_deadline_s: float = Field(default=1.5, gt=0, le=30)
     library_items_limit: int = Field(default=50, ge=1, le=100)
     online_rooms_limit: int = Field(default=20, ge=1, le=50)
     online_matches_limit: int = Field(default=10, ge=1, le=50)

@@ -32,6 +32,7 @@ RATING = "http://rating.test"
 PROGRESSION = "http://progression.test"
 NOTIFICATIONS = "http://notifications.test"
 SOCIAL = "http://social.test"
+MEDIA_PIPELINE = "http://media-pipeline.test"
 SESSION = UUID("0192a3b4-c5d6-7e8f-9a0b-000000000700")
 ITEM = UUID("0192a3b4-c5d6-7e8f-9a0b-0000000000a1")
 PUBLIC = "public, max-age=30, stale-while-revalidate=60"
@@ -241,6 +242,7 @@ class Stubs:
     progression: ServiceStub
     notifications: ServiceStub
     social: ServiceStub
+    media_pipeline: ServiceStub
 
 
 @dataclass
@@ -297,17 +299,23 @@ def stubs() -> Iterator[Stubs]:
         identity.route("POST", "/internal/v1/service-tokens").respond(
             200, json={"access_token": SERVICE_TOKEN, "token_type": "Bearer", "expires_in": 600}
         )
+        collections = stack.enter_context(stub_service(COLLECTIONS, service="collections"))
+        # Обложек по умолчанию нет: тесты витрин их не касаются, тесты обложек переопределяют.
+        collections.route("POST", "/internal/v1/cover-items").respond(200, json={"items": []})
         yield Stubs(
             social=social,
             progression=progression,
             game=stack.enter_context(stub_service(GAME, service="game")),
             catalog=stack.enter_context(stub_service(CATALOG, service="catalog")),
             identity=identity,
-            collections=stack.enter_context(stub_service(COLLECTIONS, service="collections")),
+            collections=collections,
             library=stack.enter_context(stub_service(LIBRARY, service="library")),
             match=stack.enter_context(stub_service(MATCH, service="match")),
             rating=stack.enter_context(stub_service(RATING, service="rating")),
             notifications=stack.enter_context(stub_service(NOTIFICATIONS, service="notifications")),
+            media_pipeline=stack.enter_context(
+                stub_service(MEDIA_PIPELINE, service="media_pipeline")
+            ),
         )
 
 
@@ -330,6 +338,7 @@ async def bff(
             "progression_url": PROGRESSION,
             "notifications_url": NOTIFICATIONS,
             "social_url": SOCIAL,
+            "media_pipeline_url": MEDIA_PIPELINE,
             "timeout_s": 0.5,
             "breaker_failures": 3,
         },
@@ -3818,3 +3827,117 @@ async def test_results_round_without_artwork_keeps_final_clue(bff: Bff) -> None:
     [round_] = response.json()["blocks"]["result"]["data"]["rounds"]
     assert round_["artwork"] is None
     assert round_["final_clue"]["url"] == "/media/a/x.jpg"
+
+
+# ----------------------------------------------------------------------------- обложки сборников
+COVER_ITEM = UUID("0192a3b4-c5d6-7e8f-9a0b-0000000000c1")
+COVER_LINK = {
+    "media_item_id": str(COVER_ITEM),
+    "url": "https://media.test/covers/c1.webp?sig=abc",
+    "expires_at": "2026-10-16T14:00:00Z",
+    "mime": "image/webp",
+}
+ARTWORK = {"url": COVER_LINK["url"], "expires_at": COVER_LINK["expires_at"], "mime": "image/webp"}
+
+
+def _covers_up(bff: Bff) -> tuple[respx.Route, respx.Route]:
+    items = bff.stubs.collections.route("POST", "/internal/v1/cover-items").respond(
+        200,
+        json={"items": [{"collection_id": str(COLLECTION_ID), "media_item_id": str(COVER_ITEM)}]},
+    )
+    links = bff.stubs.media_pipeline.route("POST", "/internal/v1/cover-links").respond(
+        200, json={"items": [COVER_LINK]}
+    )
+    return items, links
+
+
+async def test_collections_page_has_cover_artwork_with_one_call_per_service(bff: Bff) -> None:
+    bff.stubs.collections.route("GET", "/v1/collections").mock(side_effect=_by_sort)
+    items, links = _covers_up(bff)
+
+    response = await bff.client.get("/v1/pages/collections")
+
+    assert response.status_code == 200, response.text
+    blocks = response.json()["blocks"]
+    for name in ("featured", "popular", "new"):
+        assert blocks[name]["data"]["items"][0]["cover_artwork"] == ARTWORK
+    # Три витрины - один вызов collections и один media-pipeline, оба под сервисным токеном.
+    assert items.call_count == links.call_count == 1
+    assert items.calls.last.request.headers["authorization"] == f"Bearer {SERVICE_TOKEN}"
+    assert links.calls.last.request.headers["authorization"] == f"Bearer {SERVICE_TOKEN}"
+    assert json.loads(links.calls.last.request.content) == {"media_item_ids": [str(COVER_ITEM)]}
+
+
+async def test_collection_page_has_cover_artwork(bff: Bff) -> None:
+    _covers_up(bff)
+    bff.stubs.collections.route("GET", f"/v1/collections/{COLLECTION_ID}").respond(
+        200,
+        json=collection_card(
+            "Кино", visibility="public", status="published", version=1, items_visible=False
+        ),
+    )
+    bff.stubs.game.route("GET", f"/v1/collections/{COLLECTION_ID}/modes").respond(200, json=[])
+
+    response = await bff.client.get(f"/v1/pages/collections/{COLLECTION_ID}")
+
+    assert response.status_code == 200, response.text
+    assert response.json()["blocks"]["collection"]["data"]["cover_artwork"] == ARTWORK
+
+
+@pytest.mark.parametrize("broken", ["collections_503", "media_503", "no_scope"])
+async def test_collections_page_survives_cover_failures(bff: Bff, broken: str) -> None:
+    bff.stubs.collections.route("GET", "/v1/collections").mock(side_effect=_by_sort)
+    _covers_up(bff)
+    if broken == "collections_503":
+        bff.stubs.collections.route("POST", "/internal/v1/cover-items").respond(503)
+    elif broken == "media_503":
+        bff.stubs.media_pipeline.route("POST", "/internal/v1/cover-links").respond(503)
+    else:
+        bff.stubs.collections.route("POST", "/internal/v1/cover-items").respond(
+            403, json={"code": "auth.forbidden", "title": "x", "status": 403}
+        )
+
+    response = await bff.client.get("/v1/pages/collections")
+
+    assert response.status_code == 200, response.text
+    card = response.json()["blocks"]["popular"]["data"]["items"][0]
+    assert card["title"] == "popular"
+    assert card["cover_artwork"] is None
+
+
+async def test_covers_endpoint_batches_and_hides_unit_ids(bff: Bff) -> None:
+    other = uuid7()
+    items, links = _covers_up(bff)
+
+    response = await bff.client.post(
+        "/v1/collections/covers",
+        json={"collection_ids": [str(COLLECTION_ID), str(other), str(COLLECTION_ID)]},
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.headers["cache-control"] == "no-store"
+    assert response.json() == {
+        "items": [
+            {"collection_id": str(COLLECTION_ID), "cover_artwork": ARTWORK},
+            {"collection_id": str(other), "cover_artwork": None},
+        ]
+    }
+    assert str(COVER_ITEM) not in response.text
+    assert items.call_count == links.call_count == 1
+    assert json.loads(items.calls.last.request.content) == {
+        "collection_ids": [str(COLLECTION_ID), str(other)]
+    }
+
+
+async def test_covers_endpoint_limits_and_degradation(bff: Bff) -> None:
+    ids = [str(uuid7()) for _ in range(51)]
+    url = "/v1/collections/covers"
+    assert (await bff.client.post(url, json={"collection_ids": ids})).status_code == 422
+    assert (await bff.client.post(url, json={"collection_ids": []})).status_code == 422
+    extra = {"collection_ids": ids[:1], "x": 1}
+    assert (await bff.client.post(url, json=extra)).status_code == 422
+
+    bff.stubs.collections.route("POST", "/internal/v1/cover-items").respond(503)
+    down = await bff.client.post(url, json={"collection_ids": ids[:2]})
+    assert down.status_code == 200
+    assert [i["cover_artwork"] for i in down.json()["items"]] == [None, None]

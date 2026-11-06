@@ -2,6 +2,26 @@
 // Сгенерировано `pnpm gen:api` из contracts/openapi/bff_web.json. Не править руками.
 
 export interface paths {
+    "/v1/collections/covers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Обложки сборников для списков вне страницы каталога
+         * @description Для карточек, которые фронт берёт напрямую из collections (постраничный каталог и поиск, избранное, «мои сборники»): тело `{collection_ids: [до 50]}`, ответ - `cover_artwork` (картинка первой единицы) для каждого запрошенного id. Только публичные опубликованные сборники; для закрытых, несуществующих и без картинки - `null` (неразличимо). Id единиц не раскрываются. Без токена, не кэшируется; частоту ограничивает gateway, как у остальных публичных ручек. Источники недоступны - 200 с `null`. Больше `GV_PAGES__COVERS_BATCH_MAX` id - 422 `bff.too_many_ids`.
+         */
+        post: operations["collection_covers_v1_collections_covers_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/meta": {
         parameters: {
             query?: never;
@@ -959,6 +979,8 @@ export interface components {
              */
             collection_id: string;
             cover?: components["schemas"]["CollectionCover"] | null;
+            /** @description Картинка (artwork) первой единицы публичного сборника: подписанная ссылка со сроком, стабильная в пределах окна выдачи. `null` - сборник закрытый, без картинки либо источник обложек недоступен: показывайте пресет `cover`. */
+            cover_artwork?: components["schemas"]["ResultArtwork"] | null;
             /** Default Mode Key */
             default_mode_key: string;
             /** Difficulty */
@@ -1003,6 +1025,34 @@ export interface components {
             preset: string;
         };
         /**
+         * CollectionCoverItem
+         * @description Обложка одного сборника.
+         */
+        CollectionCoverItem: {
+            /**
+             * Collection Id
+             * Format: uuid
+             */
+            collection_id: string;
+            cover_artwork?: components["schemas"]["ResultArtwork"] | null;
+        };
+        /**
+         * CollectionCoversOut
+         * @description Обложки запрошенных сборников; для закрытых и без картинки - `cover_artwork: null`.
+         */
+        CollectionCoversOut: {
+            /** Items */
+            items: components["schemas"]["CollectionCoverItem"][];
+        };
+        /**
+         * CollectionCoversRequest
+         * @description Какие сборники нужны (дубли схлопываются; предел - `GV_PAGES__COVERS_BATCH_MAX`).
+         */
+        CollectionCoversRequest: {
+            /** Collection Ids */
+            collection_ids: string[];
+        };
+        /**
          * CollectionDetail
          * @description Сборник целиком (``collections /v1/collections/{id}``).
          */
@@ -1014,6 +1064,8 @@ export interface components {
              */
             collection_id: string;
             cover?: components["schemas"]["CollectionCover"] | null;
+            /** @description Картинка (artwork) первой единицы публичного сборника: подписанная ссылка со сроком, стабильная в пределах окна выдачи. `null` - сборник закрытый, без картинки либо источник обложек недоступен: показывайте пресет `cover`. */
+            cover_artwork?: components["schemas"]["ResultArtwork"] | null;
             /** Default Mode Key */
             default_mode_key: string;
             /** Description */
@@ -3358,6 +3410,40 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    collection_covers_v1_collections_covers_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CollectionCoversRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CollectionCoversOut"];
+                };
+            };
+            /** @description Некорректные данные */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     meta_v1_meta_get: {
         parameters: {
             query?: never;

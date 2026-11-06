@@ -289,3 +289,13 @@ class MediaItemSnapshot:
     status: ItemStatus
     sources: tuple[CatalogSource, ...]
     texts: CatalogTexts = field(default_factory=CatalogTexts)
+
+
+@dataclass(frozen=True, slots=True)
+class CoverLink:
+    """Подписанная ссылка на обложку единицы (пакетная выдача для карточек)."""
+
+    media_item_id: UUID
+    url: str
+    expires_at: datetime
+    mime: str

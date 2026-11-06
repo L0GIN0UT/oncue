@@ -47,6 +47,8 @@ from bff_web_service.application.ports import (
     UpstreamUnavailableError,
 )
 from bff_web_service.application.queries.collections import (
+    CollectionCovers,
+    GetCollectionCovers,
     GetCollectionPage,
     GetCollectionsPage,
     collection_me,
@@ -85,7 +87,9 @@ log = structlog.get_logger(__name__)
 
 __all__ = [
     "GUEST_FORBIDDEN",
+    "CollectionCovers",
     "EventsContext",
+    "GetCollectionCovers",
     "GetCollectionPage",
     "GetCollectionsPage",
     "GetEventPage",
