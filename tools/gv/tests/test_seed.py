@@ -75,6 +75,9 @@ class FakeStack:
     playable_count: int = 40  # сколько играбельных единиц отдаёт поиск проекции (≤ 50)
     synthetic_playable: int = 0  # сколько ещё — только по запросу q=синтетика
     playable_items: tuple[str, ...] = ()  # media_item_id единиц ITEMS, играбельных в поиске
+    # Чужие играбельные единицы, идущие в общей выдаче по названию раньше единиц ITEMS: при
+    # лимите 50 они вытесняют сборник из выдачи без ``ids`` (стенд с тысячами единиц).
+    crowd: int = 0
     unpublished: str | None = None  # режим, которого нет среди опубликованных (404)
     # game: онлайн-шаблоны в GET /v1/modes?session=online и сколько опросов их ещё нет
     online_modes: tuple[str, ...] = ()
@@ -356,9 +359,14 @@ class FakeStack:
         if request.url.params["playable_for_mode"] == self.unpublished:
             return _problem(404, "game.mode_not_found")
         q = request.url.params.get("q")
-        if q is None:
+        asked = request.url.params.get_list("ids")
+        if asked:
+            # Поиск по ``ids``: только заданные единицы, хоть их и вытесняет «толпа» из выдачи.
+            ids = [i for i in self.playable_items if i in asked]
+        elif q is None:
             ids = [f"01a00000-0000-7000-8000-0000000000{i:02x}" for i in range(self.playable_count)]
-            ids += list(self.playable_items)
+            ids = [f"01a00000-0000-7000-7000-{i:012x}" for i in range(self.crowd)] + ids
+            ids = (ids + list(self.playable_items))[: int(request.url.params["limit"])]
         else:
             assert q == SYNTHETIC_TITLE_QUERY
             ids = [
@@ -1133,6 +1141,14 @@ class TestModePlan:
             themed,
         )
 
+    def test_bracket_subject_roles(self) -> None:
+        import yaml
+
+        spec = yaml.safe_load(
+            (REPO / "seeds/game/modes/film.bracket.weekly.yaml").read_text("utf-8")
+        )
+        assert mode_plan(spec).subject_roles == ("director",)
+
     def test_week_starts_on_monday(self) -> None:
         plan = mode_plan({"key": "k", "source": {"params": {"period": "week", **_AHEAD}}})
         assert plan.period_start(date(2026, 10, 18)) == date(2026, 10, 12)  # воскресенье
@@ -1285,6 +1301,22 @@ class TestSeedOnline:
         with pytest.raises(SeedError, match=r"film\.lobby\.collection.*≥ 3"):
             _run(stack, _online(workspace, lobby_rounds=3))
         assert not stack.recorded("POST", "/admin/v1/imports")
+
+    def test_lobby_collection_found_among_crowded_projection(self, workspace: Path) -> None:
+        # Регрессия: в проекции стенда тысячи единиц, общий поиск отдаёт лишь первые 50 по
+        # названию; единицы сборника в нём нет, и лобби считалось неиграбельным («0 из N»).
+        stack = FakeStack(
+            online_modes=ONLINE, playable_items=(FILM_ID,), crowd=60, playable_count=0
+        )
+        _run(stack, _online(workspace))
+        asked = [
+            r
+            for r in stack.recorded("GET", "/admin/v1/projection/items")
+            if r.url.params["playable_for_mode"] == "film.lobby.collection"
+            and r.url.params.get_list("ids")
+        ]
+        assert asked
+        assert FILM_ID in asked[-1].url.params.get_list("ids")
 
     def test_lobby_collection_not_playable_times_out(self, workspace: Path) -> None:
         stack = FakeStack(online_modes=ONLINE)  # единица сборника не играбельна под шаблон

@@ -830,9 +830,18 @@ class SqlProjectionRepository:
         )
         return [SubjectRow(person_id=UUID(p), name=n, role=r, items=int(k)) for p, r, n, k in rows]
 
-    async def search(self, *, q: str | None, domain: str | None, limit: int) -> list[CatalogItem]:
-        """Поиск по подстроке названия (без учёта регистра)."""
+    async def search(
+        self,
+        *,
+        q: str | None,
+        domain: str | None,
+        limit: int,
+        ids: Collection[UUID] | None = None,
+    ) -> list[CatalogItem]:
+        """Поиск по подстроке названия (без учёта регистра); ``ids`` - только эти единицы."""
         query = select(catalog_items)
+        if ids is not None:
+            query = query.where(catalog_items.c.media_item_id.in_(sorted(ids)))
         if domain is not None:
             query = query.where(catalog_items.c.domain == domain)
         if q:

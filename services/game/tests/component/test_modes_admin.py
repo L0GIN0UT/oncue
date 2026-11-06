@@ -393,3 +393,31 @@ async def test_config_cache_generation_invalidates_other_process(game: Any) -> N
     assert (await other.latest(RANDOM)).version == 1  # type: ignore[union-attr]  # поколение сверяется раз в секунду
     ticks[0] += 2
     assert (await other.latest(RANDOM)).version == 2  # type: ignore[union-attr]
+
+
+async def test_projection_search_by_ids_checks_exact_items(game: Any) -> None:
+    """``ids`` проверяет играбельность заданных единиц, а не первых ``limit`` по названию."""
+    assert (await game.run_job("game.modes.bootstrap")).value == "ok"
+    ready_id = await game.add_item(title="Яблоко", ready_for=DAILY)
+    plain_id = await game.add_item(title="Ананас")
+    for i in range(3):
+        await game.add_item(title=f"Арбуз {i}", ready_for=DAILY)
+
+    response = await game.client.get(
+        "/admin/v1/projection/items",
+        params=[
+            ("playable_for_mode", DAILY),
+            ("limit", 2),
+            ("ids", str(ready_id)),
+            ("ids", str(plain_id)),
+        ],
+        headers=game.admin(DAILY_VIEW),
+    )
+
+    assert response.status_code == 200, response.text
+    playable = {row["media_item_id"]: row["playable"] for row in response.json()}
+    assert playable == {str(ready_id): True, str(plain_id): False}
+    bad = await game.client.get(
+        "/admin/v1/projection/items", params={"ids": "не-uuid"}, headers=game.admin(DAILY_VIEW)
+    )
+    assert bad.status_code == 422

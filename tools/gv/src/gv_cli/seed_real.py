@@ -287,6 +287,8 @@ class RealUnit:
         poster: Постер фильма.
         frames: Кадры фильма по возрастанию позиции.
         artists: Исполнители трека (персоны с ролью ``artist``); у кино пусто.
+        directors: Режиссёры и создатели кино (роль ``director`` после приведения ролей);
+            у трека пусто.
     """
 
     key: str
@@ -305,6 +307,7 @@ class RealUnit:
     poster: Path | None = None
     frames: tuple[Path, ...] = ()
     artists: tuple[str, ...] = ()
+    directors: tuple[str, ...] = ()
 
 
 # ---------------------------------------------------------------- разбор каталога
@@ -489,6 +492,11 @@ def build_units(real_dir: Path, *, tracks_limit: int | None = None) -> list[Real
                 media_type=_media_type(row),
                 poster=poster,
                 frames=frames,
+                directors=tuple(
+                    str(p["name"])
+                    for p in _persons(row.get("persons") or ())
+                    if p["role"] == "director"
+                ),
             )
         )
     units.extend(
@@ -895,6 +903,38 @@ class SkippedMode:
 
     key: str
     reason: str
+
+
+def subject_problem(plan: ModePlan, units: Sequence[RealUnit]) -> str | None:
+    """Причина, по которой тема набора периода (сетка) не соберётся, или ``None``.
+
+    Тему периода выбирает game: персона с ролью из ``subject.roles`` и не меньше
+    ``subject.min_items`` играбельных единиц. В реальном каталоге топ-N у одного режиссёра
+    таких единиц обычно меньше (нужно 32), и набор периода получается пустым без темы.
+    Проверка по загруженным данным заранее называет лучшего кандидата, а не ждёт пул.
+    Роли без данных у сидера (``actor``) не проверяются.
+    """
+    if not plan.themed or not plan.subject_roles:
+        return None
+    sources = {"director": lambda u: u.directors, "artist": lambda u: u.artists}
+    if any(role not in sources for role in plan.subject_roles):
+        return None
+    counts: Counter[str] = Counter()
+    shown: dict[str, str] = {}
+    for unit in units:
+        names = {n for role in plan.subject_roles for n in sources[role](unit)}
+        for name in names:
+            counts[name.casefold()] += 1
+            shown.setdefault(name.casefold(), name)
+    best = counts.most_common(1)
+    if best and best[0][1] >= plan.min_playable:
+        return None
+    note = f"максимум {best[0][1]} ({shown[best[0][0]]})" if best else "персон нет"
+    return (
+        f"нет персоны ({'/'.join(plan.subject_roles)}) с ≥ {plan.min_playable} единиц "
+        f"домена {plan.domain}: {note}; тема набора периода не выбирается. Засейте синтетику "
+        "(gv dev seed) или добавьте тайтлы одного режиссёра"
+    )
 
 
 # ---------------------------------------------------------------- пакет для media-pipeline
@@ -1396,7 +1436,7 @@ class RealSeeder(Seeder):
                 )
                 skipped.append(SkippedMode(plan.key, reason))
                 continue
-            problem = self._playable_problem(plan)
+            problem = subject_problem(plan, have) or self._playable_problem(plan)
             if problem is None:
                 ready.append(plan)
             else:

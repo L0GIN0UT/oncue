@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from datetime import date
 from typing import Annotated, Any, Literal
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, Path, Query
 
@@ -340,13 +341,24 @@ def build_admin_router(c: ApiServices) -> APIRouter:
     )
     async def search_projection(
         principal: DailyViewer,
+        *,
         q: Annotated[str | None, Query(max_length=64)] = None,
         domain: Annotated[Domain | None, Query()] = None,
         playable_for_mode: Annotated[str | None, Query(max_length=100)] = None,
         limit: Annotated[int, Query(ge=1, le=50)] = 20,
+        ids: Annotated[
+            list[UUID] | None,
+            Query(
+                max_length=50,
+                description=(
+                    "Только эти единицы (media_item_id, до 50): проверка играбельности "
+                    "заданных единиц, например сборника, а не первых по названию."
+                ),
+            ),
+        ] = None,
     ) -> list[ProjectionItem]:
         rows = await c.daily_admin.search(
-            q=q, domain=domain, playable_for_mode=playable_for_mode, limit=limit
+            q=q, domain=domain, playable_for_mode=playable_for_mode, limit=limit, ids=ids
         )
         return [ProjectionItem.model_validate(r) for r in rows]
 

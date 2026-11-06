@@ -3298,6 +3298,8 @@ export interface operations {
         parameters: {
             query?: {
                 domain?: ("music" | "film") | null;
+                /** @description Только эти единицы (media_item_id, до 50): проверка играбельности заданных единиц, например сборника, а не первых по названию. */
+                ids?: string[] | null;
                 limit?: number;
                 playable_for_mode?: string | null;
                 q?: string | null;

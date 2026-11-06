@@ -11,6 +11,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Collection
 from dataclasses import dataclass
 from datetime import date, timedelta
 from typing import Any
@@ -488,15 +489,25 @@ class DailySetAdmin:
         return response
 
     async def search(
-        self, *, q: str | None, domain: str | None, playable_for_mode: str | None, limit: int
+        self,
+        *,
+        q: str | None,
+        domain: str | None,
+        playable_for_mode: str | None,
+        limit: int,
+        ids: Collection[UUID] | None = None,
     ) -> list[Json]:
-        """Кандидаты на замену с признаком играбельности под режим."""
+        """Кандидаты на замену с признаком играбельности под режим.
+
+        ``ids`` - проверить играбельность заданных единиц (сидер сборников): без него поиск
+        отдаёт первые ``limit`` единиц по названию и нужные в выборку могут не попасть.
+        """
         rules = None
         if playable_for_mode is not None:
             _, rules = await self._catalog.latest(playable_for_mode)
             domain = domain or rules.domain
         async with self._uow() as uow:
-            items = await uow.projection.search(q=q, domain=domain, limit=limit)
+            items = await uow.projection.search(q=q, domain=domain, limit=limit, ids=ids)
             ok = (
                 await playable_ids(uow, rules, [i.media_item_id for i in items])
                 if rules is not None
