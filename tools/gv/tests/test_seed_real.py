@@ -40,6 +40,7 @@ from gv_cli.seed_real import (
     report_broken,
     slugify,
     split_batches,
+    subject_problem,
     unit_files,
     unit_provenance,
     with_featured,
@@ -820,9 +821,8 @@ def _plan(
         period=period,
         timezone="UTC",
         size=None,
-        themed=False,
         domain=domain,
-        **extra,
+        **{"themed": False, **extra},
     )
 
 
@@ -1738,3 +1738,45 @@ class TestBrokenUnitsAreExcluded:
         listed = (tmp_path / "seedpack" / "broken-units.txt").read_text(encoding="utf-8")
         assert "film:tmdb-1" in listed and "track:demo-9" in listed
         assert any("пропущено битых единиц: 2" in line for line in lines)
+
+
+def _directed(n: int, *names: str) -> RealUnit:
+    return replace(_film(n, 2000, 7.0), directors=names)
+
+
+class TestSubjectProblem:
+    """Тема набора периода (сетка): режиссёр с нужным числом единиц в загруженных данных."""
+
+    def _bracket(self) -> ModePlan:
+        return _plan(
+            "film.bracket.weekly",
+            "film",
+            3,
+            period="week",
+            themed=True,
+            subject_roles=("director",),
+        )
+
+    def test_no_director_with_enough_films_names_best_candidate(self) -> None:
+        units = [_directed(1, "Нолан"), _directed(2, "нолан"), _directed(3, "Скотт")]
+        problem = subject_problem(self._bracket(), units)
+        assert problem is not None
+        assert "максимум 2 (Нолан)" in problem and "≥ 3" in problem
+
+    def test_enough_films_of_one_director(self) -> None:
+        units = [_directed(n, "Нолан") for n in range(3)]
+        assert subject_problem(self._bracket(), units) is None
+
+    def test_mode_without_theme_or_unknown_role_is_not_checked(self) -> None:
+        plain = _plan("film.daily", "film", 3, period="day")
+        assert subject_problem(plain, []) is None
+        actor = replace(self._bracket(), subject_roles=("actor",))
+        assert subject_problem(actor, []) is None
+
+    def test_plan_modes_skips_bracket_without_theme_before_waiting_for_pool(self) -> None:
+        films = [_directed(n, f"Режиссёр {n}") for n in range(6)]
+        seeder = _standalone_seeder(films, {})
+        ready, skipped = seeder.plan_modes([self._bracket()], _items(films))
+        assert ready == []
+        assert skipped[0].key == "film.bracket.weekly"
+        assert "тема набора периода не выбирается" in skipped[0].reason

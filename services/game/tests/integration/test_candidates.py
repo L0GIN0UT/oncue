@@ -262,3 +262,24 @@ async def test_subjects_limit_and_projection_columns(
     assert len(rows) == 1 and (rows[0].person_id, rows[0].items) == (ACTOR.id, 3)
     assert item is not None and item.person_ids == (DIRECTOR.id, ACTOR.id)
     assert item.metric("year") == 2000.0 and item.metric("vote_average") is None
+
+
+async def test_search_by_ids_returns_only_given_items(
+    sessions: async_sessionmaker[AsyncSession],
+) -> None:
+    """Поиск админки с ``ids`` отдаёт заданные единицы, даже когда в проекции их тысячи.
+
+    Без ``ids`` лимит режет выдачу по названию: единицы сборника в неё не попадают, и сидер
+    видел «играбельных 0 из 12» при готовых наборах.
+    """
+    wanted = [POOL[16].media_item_id, POOL[0].media_item_id]
+    async with sessions() as session:
+        repo = SqlProjectionRepository(session)
+        found = await repo.search(q=None, domain=None, limit=50, ids=wanted)
+        limited = await repo.search(q=None, domain=None, limit=2)
+        empty = await repo.search(q=None, domain=None, limit=50, ids=[])
+        film_only = await repo.search(q=None, domain="film", limit=50, ids=wanted)
+    assert {i.media_item_id for i in found} == set(wanted)
+    assert len(limited) == 2
+    assert empty == []
+    assert {i.media_item_id for i in film_only} == {POOL[0].media_item_id}

@@ -245,6 +245,7 @@ class ModePlan:
         online: Онлайн-шаблон (``session.kind`` — не ``solo``; играет match, ADR 0032).
         uses_collection: Источник раундов — сборники (``source.type: collection``).
         rounds: Раунды онлайн-сессии по умолчанию (``session.rounds``).
+        subject_roles: Роли персоны-темы набора периода (``subject.roles``); пусто - темы нет.
     """
 
     key: str
@@ -257,6 +258,7 @@ class ModePlan:
     online: bool = False
     uses_collection: bool = False
     rounds: int | None = None
+    subject_roles: tuple[str, ...] = ()
 
     @property
     def lobby_by_collection(self) -> bool:
@@ -297,6 +299,7 @@ def mode_plan(spec: Mapping[str, Any]) -> ModePlan:
         online=online,
         uses_collection=spec.get("source", {}).get("type") == COLLECTION_SOURCE,
         rounds=rounds,
+        subject_roles=tuple(str(r) for r in subject.get("roles") or ()),
     )
 
 
@@ -852,15 +855,37 @@ class Seeder:
             params: dict[str, Any] = {"playable_for_mode": mode_key, "limit": PROJECTION_LIMIT}
             if q is not None:
                 params["q"] = q
-            resp = self._game.get("/admin/v1/projection/items", params=params)
-            if resp.status_code == httpx.codes.NOT_FOUND:
-                raise SeedError(
-                    f"режим {mode_key} не опубликован в game: сид seeds/game/modes не прошёл "
-                    "проверку при старте game (см. лог game.bootstrap_config_invalid)"
-                )
-            self._check(resp, {200}, f"проекция game для {mode_key}")
-            found |= {str(it["media_item_id"]) for it in resp.json() if it.get("playable")}
+            found |= self._projection_playable(mode_key, params)
         return found
+
+    def _playable_among(self, mode_key: str, ids: Iterable[str]) -> set[str]:
+        """Играбельные под режим из заданных единиц: поиск проекции по ``ids`` пачками.
+
+        Общий поиск (:meth:`_playable_ids`) отдаёт первые ``PROJECTION_LIMIT`` единиц по
+        названию, а в проекции стенда с реальными данными их тысячи: единицы сборника в
+        выдачу не попадали, и сборник считался неиграбельным («0 из 12») при готовых наборах.
+        """
+        wanted = sorted(set(ids))
+        found: set[str] = set()
+        for start in range(0, len(wanted), PROJECTION_LIMIT):
+            params: dict[str, Any] = {
+                "playable_for_mode": mode_key,
+                "limit": PROJECTION_LIMIT,
+                "ids": wanted[start : start + PROJECTION_LIMIT],
+            }
+            found |= self._projection_playable(mode_key, params)
+        return found
+
+    def _projection_playable(self, mode_key: str, params: Mapping[str, Any]) -> set[str]:
+        """Один запрос поиска проекции: ``media_item_id`` играбельных под режим единиц."""
+        resp = self._game.get("/admin/v1/projection/items", params=params)
+        if resp.status_code == httpx.codes.NOT_FOUND:
+            raise SeedError(
+                f"режим {mode_key} не опубликован в game: сид seeds/game/modes не прошёл "
+                "проверку при старте game (см. лог game.bootstrap_config_invalid)"
+            )
+        self._check(resp, {200}, f"проекция game для {mode_key}")
+        return {str(it["media_item_id"]) for it in resp.json() if it.get("playable")}
 
     def _wait_playable(self, mode_key: str, min_playable: int) -> None:
         """Дождаться, пока проекция game покажет ≥ ``min_playable`` играбельных единиц режима."""
@@ -933,7 +958,7 @@ class Seeder:
         seen: dict[str, int] = {}
 
         def enough() -> bool:
-            seen["count"] = len(wanted & self._playable_ids(plan.key))
+            seen["count"] = len(self._playable_among(plan.key, wanted))
             return seen["count"] >= plan.min_playable
 
         self._echo(f"seed: ожидание сборника {key} под онлайн-шаблон {plan.key}")

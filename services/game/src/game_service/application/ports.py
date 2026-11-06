@@ -192,8 +192,9 @@ class ProjectionRepository(Protocol):
         q: str | None,
         domain: str | None,
         limit: int,
+        ids: Collection[UUID] | None = None,
     ) -> list[CatalogItem]:
-        """Поиск единиц по названию (админка)."""
+        """Поиск единиц по названию (админка); ``ids`` сужает выборку заданными единицами."""
         ...
 
 

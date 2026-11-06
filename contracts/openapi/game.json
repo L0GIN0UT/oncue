@@ -5510,6 +5510,29 @@
               "title": "Limit",
               "type": "integer"
             }
+          },
+          {
+            "description": "Только эти единицы (media_item_id, до 50): проверка играбельности заданных единиц, например сборника, а не первых по названию.",
+            "in": "query",
+            "name": "ids",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  "maxItems": 50,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Только эти единицы (media_item_id, до 50): проверка играбельности заданных единиц, например сборника, а не первых по названию.",
+              "title": "Ids"
+            }
           }
         ],
         "responses": {
