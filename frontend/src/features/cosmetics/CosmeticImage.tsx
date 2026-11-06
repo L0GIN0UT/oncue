@@ -67,25 +67,27 @@ type Props = {
   item: Pick<CosmeticCard, "title" | "media_kind" | "asset_url" | "poster_url"> & {
     /** Слот предмета: от него зависит иконка заглушки. */
     slot?: string;
+    /**
+     * Товар «Своя аватарка» (ADR 0048): по смыслу у него нет картинки, это право загрузить свою.
+     * Заглушка получает иконку загрузки, чтобы не выглядеть сломанной картинкой.
+     */
+    grants_custom_avatar?: boolean;
   };
   className?: string;
   /** Украшение рядом с текстом (рамка, фон): пустой `alt`, заглушка скрыта от скринридеров. */
   decorative?: boolean;
   /** Разрешить blob:-адрес (только превью выбранного файла аватарки). */
   allowBlob?: boolean;
-  /**
-   * Товар «Своя аватарка» (ADR 0048): у него нет картинки по смыслу — это право загрузить свою.
-   * Заглушка с иконкой загрузки, чтобы это не выглядело сломанной картинкой.
-   */
-  customUpload?: boolean;
-  /** Подпись «Своя картинка» под иконкой заглушки `customUpload` (крупные плитки и предпросмотр). */
+  /** Подпись «Загрузите свою» под иконкой заглушки «Своей аватарки» (крупные плитки и предпросмотр). */
   showLabel?: boolean;
 };
 
 function CustomUploadLabel() {
   const t = useTranslations();
   return (
-    <span className="px-1 text-center text-xs leading-tight">{t("shop.customAvatar.label")}</span>
+    <span className="px-1 text-center text-[10px] leading-tight text-ink-muted">
+      {t("shop.customAvatar.label")}
+    </span>
   );
 }
 
@@ -94,7 +96,6 @@ export function CosmeticImage({
   className,
   decorative = false,
   allowBlob = false,
-  customUpload = false,
   showLabel = false,
 }: Props) {
   const reduced = useReducedMotion();
@@ -102,6 +103,7 @@ export function CosmeticImage({
     item.media_kind === "animated" && reduced ? (item.poster_url ?? null) : item.asset_url;
   const src = safeImageUrl(wanted, { allowBlob });
   if (!src) {
+    const customUpload = item.grants_custom_avatar === true;
     const kind = customUpload
       ? "custom_avatar"
       : item.slot && item.slot in SLOT_ICONS

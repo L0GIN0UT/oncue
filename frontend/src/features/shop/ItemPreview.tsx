@@ -6,6 +6,7 @@
 import type { ReactNode } from "react";
 import { useTranslations } from "next-intl";
 import type { AppearanceCard, CosmeticCard } from "@/shared/api/types";
+import { safeImageUrl } from "@/features/cosmetics/CosmeticImage";
 import { Avatar, ProfileBackdrop } from "@/features/cosmetics/PlayerBadge";
 import type { AppearanceLike } from "@/features/cosmetics/slots";
 import { useRarityLabel, useSlotName } from "./labels";
@@ -49,6 +50,12 @@ export function ItemPreview({
       <ProfileBackdrop appearance={shown} className="rounded-[var(--radius-control)] p-3">
         <div className="flex flex-col items-center gap-2">
           <Avatar nickname={nickname} appearance={shown} size="lg" />
+          {/* Заглушка «Своей аватарки» мала для текста: подпись рядом, без дубля для скринридера. */}
+          {item.grants_custom_avatar && !safeImageUrl(item.asset_url) && (
+            <span aria-hidden data-testid="preview-custom-label" className="text-xs text-ink-muted">
+              {t("shop.customAvatar.label")}
+            </span>
+          )}
           <span className="max-w-full truncate text-sm font-medium" dir="auto">
             {nickname}
           </span>

@@ -60,6 +60,32 @@ describe("ShopView: цена", () => {
   });
 });
 
+describe("ShopView: «Своя аватарка»", () => {
+  it("плитка: иконка загрузки и подпись «Загрузите свою», имя карточки прежнее", async () => {
+    await open();
+    const tile = await screen.findByTestId("shop-item-custom_avatar");
+    const placeholder = tile.querySelector("[data-placeholder]")!;
+    expect(placeholder).toHaveAttribute("data-placeholder-kind", "custom_avatar");
+    expect(tile).toHaveTextContent("Загрузите свою");
+    expect(tile).toHaveAccessibleName(/Своя аватарка/);
+    expect(tile).not.toHaveAccessibleName(/Загрузите свою/);
+  });
+
+  it("обычный предмет без картинки: заглушка слота без подписи", async () => {
+    await open();
+    const tile = await screen.findByTestId("shop-item-fox");
+    expect(tile).not.toHaveTextContent("Загрузите свою");
+  });
+
+  it("превью выбранной «Своей аватарки» показывает подпись", async () => {
+    await open();
+    await userEvent.click(await screen.findByTestId("shop-item-custom_avatar"));
+    expect(
+      within(screen.getByTestId("shop-preview")).getByTestId("preview-custom-label"),
+    ).toHaveTextContent("Загрузите свою");
+  });
+});
+
 describe("ShopView: витрина", () => {
   it("чипы слотов — в порядке данных bff, плюс «Мои»; первый слот выбран", async () => {
     await open();
