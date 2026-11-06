@@ -152,6 +152,7 @@ SAMPLES: dict[str, list[Any]] = {
         {"levels": [{"blur_px": 1, "crop": 1, "max_width": 640.5}]},
         {"levels": [{"blur_px": 1, "crop": 1, "max_width": 63}]},
         {"levels": [{"blur_px": 1, "crop": 1}]},
+        {"levels": [{"blur_px": 1, "max_width": 640}]},  # crop необязателен (по умолчанию 1)
     ],
     "poster_masked": [
         {"levels": [{"pixel_block": 1}]},

@@ -49,10 +49,10 @@ class AudioIntroParams(PluginParams):
 
 
 class FrameLevel(PluginParams):
-    """Уровень ``frame_progressive``: размытие, доля кадра и ширина."""
+    """Уровень ``frame_progressive``: размытие и ширина; ``crop`` необязателен (1 — весь кадр)."""
 
     blur_px: Annotated[StrictFloat, Field(ge=0, le=200)]
-    crop: Annotated[StrictFloat, Field(gt=0, le=1)]
+    crop: Annotated[StrictFloat, Field(gt=0, le=1)] = 1.0
     max_width: Annotated[StrictInt, Field(ge=64, le=4096)]
 
 

@@ -88,12 +88,12 @@ class AudioBlackoutParams(AudioIntroParams):
 
 
 class FrameLevel(BaseModel):
-    """Уровень ``frame_progressive``: размытие, доля центрального кадра, ширина."""
+    """Уровень ``frame_progressive``: размытие и ширина; ``crop`` необязателен (1 — весь кадр)."""
 
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
 
     blur_px: float = Field(ge=0, le=200)
-    crop: float = Field(gt=0, le=1)
+    crop: float = Field(default=1.0, gt=0, le=1)
     max_width: int = Field(ge=64, le=4096)
 
 

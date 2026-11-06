@@ -116,3 +116,11 @@ def test_foreign_params_are_rejected() -> None:
 def test_audio_params_are_strict(body: dict[str, object]) -> None:
     with pytest.raises(ValidationError):
         AudioIntroParams.model_validate(body)
+
+
+def test_frame_crop_is_optional_and_defaults_to_whole_frame() -> None:
+    """Без ``crop`` уровень показывает весь кадр: приближения в профиле нет (ADR 0078)."""
+    params = FrameProgressiveParams.model_validate(
+        {"levels": [{"blur_px": 25, "max_width": 960}, {"blur_px": 0, "max_width": 960}]}
+    )
+    assert all(level.crop == 1.0 for level in params.levels)

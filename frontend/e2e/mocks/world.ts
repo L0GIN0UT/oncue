@@ -216,7 +216,7 @@ const AUDIO_LEVELS = [0.5, 1, 2, 4, 8, 15].map((seconds, i) => ({
 }));
 const FRAME_LEVELS = [48, 32, 20, 12, 6, 0].map((blur_px, i) => ({
   index: i + 1,
-  hint: { blur_px, crop: [0.35, 0.5, 0.7, 1, 1, 1][i] ?? 1 },
+  hint: { blur_px, crop: 1 },
 }));
 const SEQUENCE_LEVELS = [1, 2, 3, 4, 5, 6].map((frame, i) => ({ index: i + 1, hint: { frame } }));
 /** Поля описания накапливаются от уровня к уровню (как `description.params`). */
