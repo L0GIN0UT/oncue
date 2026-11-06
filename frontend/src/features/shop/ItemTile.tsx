@@ -7,6 +7,7 @@ import { useTranslations } from "next-intl";
 import type { CosmeticCard, ShopItemState } from "@/shared/api/types";
 import { cn } from "@/shared/lib/cn";
 import { CosmeticImage } from "@/features/cosmetics/CosmeticImage";
+import { useIcons } from "@/shared/ui/theme-provider";
 import { useSlotName } from "./labels";
 
 export type TileState = ShopItemState | "equipped";
@@ -26,6 +27,7 @@ export function ItemTile({
 }) {
   const t = useTranslations();
   const slotName = useSlotName();
+  const Verses = useIcons().verses;
   const caption =
     state === "equipped"
       ? t("shop.tile.equipped")
@@ -64,7 +66,14 @@ export function ItemTile({
         decorative
         className={cn("size-14 rounded-full object-cover", state === "locked" && "opacity-50")}
       />
-      <span aria-hidden className="tabular max-w-full truncate px-1 text-xs text-ink-muted">
+      <span
+        aria-hidden
+        className="tabular inline-flex max-w-full items-center gap-1 truncate px-1 text-xs text-ink-muted"
+      >
+        {/* Цена — число со значком Версов, а не голая цифра. */}
+        {typeof caption === "number" && (
+          <Verses className="size-3.5 flex-none text-music" data-testid="tile-verses-icon" />
+        )}
         {caption}
       </span>
     </button>
