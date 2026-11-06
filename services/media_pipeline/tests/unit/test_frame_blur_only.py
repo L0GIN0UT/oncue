@@ -52,7 +52,7 @@ def _sharpness(data: bytes) -> float:
 
 def test_default_profile_has_no_zoom() -> None:
     params = _default_params()
-    assert [lv.blur_px for lv in params.levels] == [25, 20, 15, 10, 5, 0]
+    assert [lv.blur_px for lv in params.levels] == [40, 30, 20, 10, 4, 0]
     assert {lv.crop for lv in params.levels} == {1.0}
     assert {lv.max_width for lv in params.levels} == {960}
 

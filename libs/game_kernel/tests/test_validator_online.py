@@ -42,11 +42,11 @@ SEEDS = [
 ONLINE_SEEDS = [p.stem for p in _SEED_FILES if p.stem not in SEEDS]
 
 FRAME_LEVELS = [
-    {"blur_px": 25, "max_width": 960},
+    {"blur_px": 40, "max_width": 960},
+    {"blur_px": 30, "max_width": 960},
     {"blur_px": 20, "max_width": 960},
-    {"blur_px": 15, "max_width": 960},
     {"blur_px": 10, "max_width": 960},
-    {"blur_px": 5, "max_width": 960},
+    {"blur_px": 4, "max_width": 960},
     {"blur_px": 0, "max_width": 960},
 ]
 
