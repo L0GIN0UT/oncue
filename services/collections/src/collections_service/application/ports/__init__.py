@@ -324,6 +324,14 @@ class CatalogReads(Protocol):
         """Каталог: до ``query.limit`` строк по keyset после ``query.after``."""
         ...
 
+    async def cover_items(self, collection_ids: Sequence[UUID]) -> list[tuple[UUID, UUID]]:
+        """Первая по ``position`` единица опубликованных ПУБЛИЧНЫХ сборников из списка.
+
+        Пары ``(collection_id, media_item_id)``; приватные, черновики, скрытые, удалённые и
+        пустые сборники в результат не попадают.
+        """
+        ...
+
     async def favorites(
         self, user_id: UUID, *, after: tuple[datetime, UUID] | None, limit: int
     ) -> list[tuple[CollectionRow, datetime]]:

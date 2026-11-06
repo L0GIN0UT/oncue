@@ -294,7 +294,12 @@ async def open_service(
         dead_letters=FakeDeadLetterSink(),
         clock=clock,
     )
-    app = create_app(definition, runtime, jwt_verifier=issuer.verifier())
+    app = create_app(
+        definition,
+        runtime,
+        jwt_verifier=issuer.verifier(),
+        service_jwt_verifier=issuer.verifier(audience="collections"),
+    )
     return runtime, definition, processor, app
 
 

@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from uuid import UUID
@@ -22,7 +23,11 @@ from collections_service.application.ports import (
 from collections_service.application.views import Presenter, draft_json
 from collections_service.domain.access import Viewer, can_view
 from collections_service.domain.difficulty import Difficulty, DifficultyModel
-from collections_service.domain.errors import CollectionNotFoundError, CollectionsRateLimitedError
+from collections_service.domain.errors import (
+    CollectionNotFoundError,
+    CollectionsRateLimitedError,
+    TooManyCoverIdsError,
+)
 from collections_service.domain.model import Status
 from collections_service.domain.policy import MetaConfig
 from gv_text.ugc import normalize_ugc
@@ -86,6 +91,7 @@ class CollectionQueries:
         limiter: RateLimiter,
         *,
         search_per_min: int,
+        cover_ids_max: int = 50,
     ) -> None:
         self._uow = uow
         self._presenter = presenter
@@ -93,6 +99,7 @@ class CollectionQueries:
         self.meta = meta
         self._limiter = limiter
         self._search_per_min = search_per_min
+        self._cover_ids_max = cover_ids_max
 
     # ------------------------------------------------------------------ каталог
     async def catalog(self, params: CatalogParams, *, subject: str) -> Json:
@@ -129,6 +136,31 @@ class CollectionQueries:
                 if last
                 else None
             ),
+        }
+
+    async def cover_items(self, collection_ids: Sequence[UUID]) -> Json:
+        """``CoverItemsOut``: первая единица каждого опубликованного ПУБЛИЧНОГО сборника.
+
+        Только для внутреннего вызова bff (D6: публичный API id единиц не отдаёт). Сборники,
+        которых нет или которые не публичны/не опубликованы, молча пропускаются: ответ не
+        должен выдавать, существует ли закрытый сборник.
+
+        Raises:
+            TooManyCoverIdsError: id больше ``covers.max_ids`` (422).
+        """
+        unique = list(dict.fromkeys(collection_ids))
+        if len(unique) > self._cover_ids_max:
+            raise TooManyCoverIdsError(
+                "слишком много сборников в запросе",
+                details={"given": len(unique), "max": self._cover_ids_max},
+            )
+        async with self._uow() as uow:
+            pairs = await uow.reads.cover_items(unique)
+        return {
+            "items": [
+                {"collection_id": str(cid), "media_item_id": str(mid)}
+                for cid, mid in sorted(pairs, key=lambda p: unique.index(p[0]))
+            ]
         }
 
     # ------------------------------------------------------------------ карточка

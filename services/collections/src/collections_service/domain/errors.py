@@ -26,6 +26,12 @@ class CollectionNotFoundError(NotFoundError):
         super().__init__(message)
 
 
+class TooManyCoverIdsError(InvalidInputError):
+    """В запросе обложек сборников больше ``covers.max_ids`` id (422, ``details.given/max``)."""
+
+    default_code = "collections.too_many_ids"
+
+
 class DraftConflictError(ConflictError):
     """``base_revision`` (``draft_revision``) не совпала с текущей ревизией черновика (409).
 

@@ -113,6 +113,19 @@ class SweepSettings(BaseModel):
     jitter_s: float = Field(default=10, ge=0)
 
 
+class CoversSettings(BaseModel):
+    """Внутренняя выдача первых единиц сборников под обложки: ``GV_COLLECTIONS__COVERS__*``.
+
+    Attributes:
+        max_ids: Сколько сборников можно спросить за один вызов
+            ``POST /internal/v1/cover-items`` (больше - 422 ``collections.too_many_ids``).
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    max_ids: int = Field(default=50, ge=1, le=200)
+
+
 class CollectionsSettings(BaseModel):
     """Настройки домена сборников: ``GV_COLLECTIONS__*``.
 
@@ -127,6 +140,7 @@ class CollectionsSettings(BaseModel):
     difficulty: DifficultySettings = DifficultySettings()
     popular: PopularSettings = PopularSettings()
     sweep: SweepSettings = SweepSettings()
+    covers: CoversSettings = CoversSettings()
     meta_config: Path | None = None
 
     @field_validator("meta_config", mode="before")
