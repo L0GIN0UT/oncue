@@ -85,6 +85,12 @@ class ShopService:
         self._clock = clock
         self._billing_enabled = billing_enabled
 
+    async def custom_avatar_item_key(self) -> str | None:
+        """Ключ предмета, дающего право на свою аватарку (``shop.custom_avatar_item_key``)."""
+        async with self._uow() as uow:
+            cfg = await shop_config(uow)
+        return None if cfg is None else cfg.custom_avatar_item_key
+
     async def catalog(self, user_id: UUID, slot: str | None) -> Catalog:
         """Активные предметы с состоянием; сначала открывается всё, что дал уровень."""
         async with self._uow() as uow:

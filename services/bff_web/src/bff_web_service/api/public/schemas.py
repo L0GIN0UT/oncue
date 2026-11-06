@@ -251,6 +251,10 @@ class CosmeticCard(BaseModel):
     poster_url: str | None = Field(description="Статичный кадр для prefers-reduced-motion")
     level_required: int | None = None
     price: int | None = None
+    grants_custom_avatar: bool = Field(
+        default=False,
+        description="true - предмет даёт право загрузить свою аватарку (заглушка «загрузите свою»)",
+    )
 
 
 class AppearanceSlotCard(BaseModel):

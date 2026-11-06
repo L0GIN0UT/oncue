@@ -1468,6 +1468,7 @@ class CosmeticCard:
     poster_url: str | None
     level_required: int | None
     price: int | None
+    grants_custom_avatar: bool = False
 
 
 @dataclass(frozen=True, slots=True)

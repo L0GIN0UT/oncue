@@ -1222,6 +1222,12 @@ export interface components {
             /** Asset Url */
             asset_url: string;
             /**
+             * Grants Custom Avatar
+             * @description true - предмет даёт право загрузить свою аватарку (заглушка «загрузите свою»)
+             * @default false
+             */
+            grants_custom_avatar: boolean;
+            /**
              * Id
              * Format: uuid
              */

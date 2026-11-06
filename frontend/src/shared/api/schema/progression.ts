@@ -1949,6 +1949,12 @@ export interface components {
              */
             event_key: string | null;
             /**
+             * Grants Custom Avatar
+             * @description true - предмет даёт право загрузить свою аватарку (ключ из `shop.custom_avatar_item_key` действующего конфига)
+             * @default false
+             */
+            grants_custom_avatar: boolean;
+            /**
              * Id
              * Format: uuid
              */

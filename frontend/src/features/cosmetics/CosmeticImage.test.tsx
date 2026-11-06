@@ -25,6 +25,7 @@ const base: CosmeticCard = {
   media_kind: "static",
   asset_url: "/cosmetics/frame_gold.webp",
   poster_url: null,
+  grants_custom_avatar: false,
 };
 
 afterEach(() => vi.unstubAllGlobals());

@@ -2451,6 +2451,7 @@ SHOP_ITEMS = {
         {"item": cosmetic(2, "title", level_required=10), "state": "locked"},
         {"item": cosmetic(3, "frame"), "state": "owned"},
         {"item": cosmetic(4, "background", price=None), "state": "owned"},
+        {"item": cosmetic(5, "avatar", grants_custom_avatar=True), "state": "available"},
     ],
     "balance": 250,
 }
@@ -2488,12 +2489,25 @@ async def test_shop_page_catalog_and_packs(bff: Bff) -> None:
     blocks = response.json()["blocks"]
     catalog = blocks["catalog"]["data"]
     assert catalog["balance"] == 250
-    assert catalog["slots"] == ["frame", "title", "background"]  # порядок появления в ответе
+    assert catalog["slots"] == [
+        "frame",
+        "title",
+        "background",
+        "avatar",
+    ]  # порядок появления в ответе
     assert [(e["item"]["key"], e["state"]) for e in catalog["items"]] == [
         ("item_1", "available"),
         ("item_2", "locked"),
         ("item_3", "owned"),
         ("item_4", "owned"),
+        ("item_5", "available"),
+    ]
+    assert [e["item"]["grants_custom_avatar"] for e in catalog["items"]] == [
+        False,
+        False,
+        False,
+        False,
+        True,
     ]
     assert catalog["items"][1]["item"]["level_required"] == 10
     assert catalog["items"][3]["item"]["price"] is None

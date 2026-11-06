@@ -44,6 +44,13 @@ class ItemView(BaseModel):
     )
     price: int | None = Field(ge=1, description="Цена в Версах; null - не продаётся")
     event_key: Key | None = Field(description="Сезонное событие (5d); в 5b всегда null")
+    grants_custom_avatar: bool = Field(
+        default=False,
+        description=(
+            "true - предмет даёт право загрузить свою аватарку "
+            "(ключ из `shop.custom_avatar_item_key` действующего конфига)"
+        ),
+    )
 
 
 class ShopItem(BaseModel):
