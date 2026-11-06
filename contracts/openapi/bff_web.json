@@ -2323,6 +2323,12 @@
             "title": "Asset Url",
             "type": "string"
           },
+          "grants_custom_avatar": {
+            "default": false,
+            "description": "true - предмет даёт право загрузить свою аватарку (заглушка «загрузите свою»)",
+            "title": "Grants Custom Avatar",
+            "type": "boolean"
+          },
           "id": {
             "format": "uuid",
             "title": "Id",

@@ -56,7 +56,7 @@ def register_shop_routes(router: APIRouter, services: ShopServices) -> None:
     """Добавить в ``/v1`` ручки магазина, инвентаря, оформления и промокода."""
     url = services.public_url
 
-    def view(item: Item) -> ItemView:
+    def view(item: Item, avatar_key: str | None) -> ItemView:
         return ItemView(
             id=item.id,
             key=item.key,
@@ -69,12 +69,15 @@ def register_shop_routes(router: APIRouter, services: ShopServices) -> None:
             level_required=item.level_required,
             price=item.price,
             event_key=None,
+            grants_custom_avatar=avatar_key is not None and item.key == avatar_key,
         )
 
-    def appearance(slots: list[SlotView]) -> Appearance:
+    def appearance(slots: list[SlotView], avatar_key: str | None) -> Appearance:
         return Appearance(
             slots=[
-                AppearanceSlot(slot=s.slot, item=None if s.item is None else view(s.item))
+                AppearanceSlot(
+                    slot=s.slot, item=None if s.item is None else view(s.item, avatar_key)
+                )
                 for s in slots
             ]
         )
@@ -95,9 +98,13 @@ def register_shop_routes(router: APIRouter, services: ShopServices) -> None:
         slot: Annotated[Key | None, Query(description="Ключ слота")] = None,
     ) -> ShopCatalog:
         catalog = await services.shop.catalog(user.user_id, slot)
+        avatar_key = await services.shop.custom_avatar_item_key()
         response.headers["Cache-Control"] = PRIVATE
         return ShopCatalog(
-            items=[ShopItem(item=view(e.item), state=e.state.value) for e in catalog.entries],
+            items=[
+                ShopItem(item=view(e.item, avatar_key), state=e.state.value)
+                for e in catalog.entries
+            ],
             balance=catalog.balance,
         )
 
@@ -118,9 +125,12 @@ def register_shop_routes(router: APIRouter, services: ShopServices) -> None:
         item_id: ItemIdPath, user: User, key: IdempotencyKey, response: Response
     ) -> PurchaseResult:
         outcome = await services.shop.purchase(user.user_id, item_id)
+        avatar_key = await services.shop.custom_avatar_item_key()
         response.headers["Cache-Control"] = PRIVATE
         return PurchaseResult(
-            item=view(outcome.item), balance_after=outcome.balance_after, repeated=outcome.repeated
+            item=view(outcome.item, avatar_key),
+            balance_after=outcome.balance_after,
+            repeated=outcome.repeated,
         )
 
     @router.get(
@@ -132,6 +142,7 @@ def register_shop_routes(router: APIRouter, services: ShopServices) -> None:
     )
     async def shop_packs(user: User, response: Response) -> PackCatalog:
         found = await services.shop.packs()
+        avatar_key = await services.shop.custom_avatar_item_key()
         response.headers["Cache-Control"] = PRIVATE
         return PackCatalog(
             packs=[
@@ -140,7 +151,7 @@ def register_shop_routes(router: APIRouter, services: ShopServices) -> None:
                     key=p.key,
                     title=p.title,
                     style=p.style,
-                    items=[view(i) for i in items],
+                    items=[view(i, avatar_key) for i in items],
                     verses_amount=p.verses_amount,
                     price_kopecks=p.price_kopecks,
                 )
@@ -157,11 +168,12 @@ def register_shop_routes(router: APIRouter, services: ShopServices) -> None:
     )
     async def my_inventory(user: User, response: Response) -> MyInventory:
         entries = await services.inventory.mine(user.user_id)
+        avatar_key = await services.shop.custom_avatar_item_key()
         response.headers["Cache-Control"] = PRIVATE
         return MyInventory(
             items=[
                 InventoryEntry(
-                    item=view(e.item),
+                    item=view(e.item, avatar_key),
                     source=e.entry.source.value,
                     acquired_at=e.entry.acquired_at,
                     expires_at=e.entry.expires_at,
@@ -188,12 +200,13 @@ def register_shop_routes(router: APIRouter, services: ShopServices) -> None:
         user_ids: Annotated[list[UUID], Query(min_length=1, max_length=12)],
     ) -> PlayersAppearance:
         players = await services.appearance.players(user_ids)
+        avatar_key = await services.shop.custom_avatar_item_key()
         response.headers["Cache-Control"] = PRIVATE
         return PlayersAppearance(
             players=[
                 PlayerAppearance(
                     user_id=p.user_id,
-                    appearance=appearance(p.slots),
+                    appearance=appearance(p.slots, avatar_key),
                     custom_avatar_url=(
                         services.ugc_url(p.custom_avatar_key) if p.custom_avatar_key else None
                     ),
@@ -215,9 +228,10 @@ def register_shop_routes(router: APIRouter, services: ShopServices) -> None:
     )
     async def my_appearance(user: User, response: Response) -> MyAppearance:
         mine = await services.appearance.mine(user.user_id)
+        avatar_key = await services.shop.custom_avatar_item_key()
         response.headers["Cache-Control"] = PRIVATE
         return MyAppearance(
-            slots=appearance(mine.slots).slots,
+            slots=appearance(mine.slots, avatar_key).slots,
             custom_avatar_url=(
                 services.ugc_url(mine.custom_avatar_key) if mine.custom_avatar_key else None
             ),
@@ -239,8 +253,9 @@ def register_shop_routes(router: APIRouter, services: ShopServices) -> None:
         slot: SlotPath, body: EquipRequest, user: User, response: Response
     ) -> Appearance:
         slots = await services.appearance.equip(user.user_id, slot, body.item_id)
+        avatar_key = await services.shop.custom_avatar_item_key()
         response.headers["Cache-Control"] = PRIVATE
-        return appearance(slots)
+        return appearance(slots, avatar_key)
 
     @router.post(
         "/promo/redeem",
@@ -263,10 +278,11 @@ def register_shop_routes(router: APIRouter, services: ShopServices) -> None:
     ) -> PromoRedeemResult:
         ip = request.client.host if request.client else None
         outcome = await services.promo.redeem(user.user_id, body.code, client_ip=ip)
+        avatar_key = await services.shop.custom_avatar_item_key()
         response.headers["Cache-Control"] = PRIVATE
         return PromoRedeemResult(
             reward_kind=outcome.reward_kind.value,
             amount=outcome.amount,
-            item=None if outcome.item is None else view(outcome.item),
+            item=None if outcome.item is None else view(outcome.item, avatar_key),
             repeated=outcome.repeated,
         )

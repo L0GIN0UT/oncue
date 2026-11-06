@@ -125,6 +125,52 @@ async def test_catalog_shows_states_and_balance_with_private_cache_header(
     )
 
 
+async def test_catalog_marks_only_the_custom_avatar_item(progression: Service) -> None:
+    """Признак `grants_custom_avatar` берётся из `shop.custom_avatar_item_key` конфига."""
+    await progression.publish_config(shop__custom_avatar_item_key="custom_avatar")
+    user = uuid7()
+    await progression.add_item("custom_avatar", slot="avatar", price=10)
+    await progression.add_item("frame_plain", price=10)
+
+    response = await progression.get("/v1/shop/items", user)
+
+    assert response.status_code == 200
+    flags = {i["item"]["key"]: i["item"]["grants_custom_avatar"] for i in response.json()["items"]}
+    assert flags == {"custom_avatar": True, "frame_plain": False}
+
+
+async def test_catalog_without_custom_avatar_key_has_no_flag(progression: Service) -> None:
+    await progression.publish_config(shop__custom_avatar_item_key=None)
+    await progression.add_item("custom_avatar", slot="avatar", price=10)
+    await progression.add_item("frame_plain", price=10)
+
+    response = await progression.get("/v1/shop/items", uuid7())
+
+    assert response.status_code == 200
+    assert [i["item"]["grants_custom_avatar"] for i in response.json()["items"]] == [False, False]
+
+
+async def test_inventory_and_appearance_carry_the_custom_avatar_flag(progression: Service) -> None:
+    await progression.publish_config(shop__custom_avatar_item_key="custom_avatar")
+    user = uuid7()
+    item = await progression.add_item("custom_avatar", slot="avatar", price=10)
+    await progression.grant_verses(user, 10)
+    assert (await progression.purchase(user, item)).status_code == 200
+    equipped = await progression.client.put(
+        "/v1/me/appearance/avatar",
+        json={"item_id": str(item)},
+        headers={**progression.user(user), **idem()},
+    )
+    assert equipped.status_code == 200, equipped.text
+
+    inventory = (await progression.get("/v1/me/inventory", user)).json()
+    mine = (await progression.get("/v1/me/appearance", user)).json()
+
+    assert inventory["items"][0]["item"]["grants_custom_avatar"] is True
+    slot = next(s for s in mine["slots"] if s["slot"] == "avatar")
+    assert slot["item"]["grants_custom_avatar"] is True
+
+
 async def test_catalog_can_be_filtered_by_slot(progression: Service) -> None:
     await progression.publish_config()
     await progression.add_item("f1", slot="frame")

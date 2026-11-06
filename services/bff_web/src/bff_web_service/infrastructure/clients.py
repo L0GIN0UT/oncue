@@ -1857,6 +1857,7 @@ class _ItemViewIn(_In):
     poster_url: str | None
     level_required: int | None
     price: int | None
+    grants_custom_avatar: bool = False
 
     def dto(self) -> CosmeticCard:
         return CosmeticCard(
@@ -1870,6 +1871,7 @@ class _ItemViewIn(_In):
             self.poster_url,
             self.level_required,
             self.price,
+            self.grants_custom_avatar,
         )
 
 

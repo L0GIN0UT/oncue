@@ -2266,6 +2266,12 @@
             "description": "Сезонное событие (5d); в 5b всегда null",
             "title": "Event Key"
           },
+          "grants_custom_avatar": {
+            "default": false,
+            "description": "true - предмет даёт право загрузить свою аватарку (ключ из `shop.custom_avatar_item_key` действующего конфига)",
+            "title": "Grants Custom Avatar",
+            "type": "boolean"
+          },
           "id": {
             "format": "uuid",
             "title": "Id",
