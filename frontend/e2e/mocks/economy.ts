@@ -44,6 +44,7 @@ const cosmetic = (
   media_kind: "static",
   asset_url: `/cosmetics/${key}.svg`,
   poster_url: null,
+  grants_custom_avatar: false,
   ...extra,
 });
 
