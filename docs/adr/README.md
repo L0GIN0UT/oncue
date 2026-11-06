@@ -81,4 +81,5 @@
 | [0076](0076-content-guess-stats.md) | Статистика угадываний по контенту в catalog: счётчики и гистограммы по (единица, режим) из `GameFinished`/`MatchFinished`, отчёт «самые лёгкие» (уточняет ADR 0074) |
 | [0077](0077-next-round-preload.md) | Предзагрузка уровня 1 следующего раунда: флаг режима `preload_next_round`, запрет при онлайне и очках по времени, `next_clue` не делаем |
 | [0079](0079-collection-cover-artwork.md) | Обложка карточки сборника - artwork первой единицы: bff собирает её сам из internal-ручек collections и media-pipeline (уточняет ADR 0028, 0073) |
+| [0080](0080-online-next-round-preload.md) | Предзагрузка уровня 1 следующего раунда в комнатах: `next_round_first_clue` в ревиле match, только не рейтинг и очки по уровню (уточняет ADR 0077) |
 | [0078](0078-frame-blur-only.md) | Кадр без приближения: уровни `frame_progressive` различаются только размытием, `crop` необязателен (уточняет ADR 0025) |

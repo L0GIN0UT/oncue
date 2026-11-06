@@ -2400,6 +2400,17 @@
             "title": "Media Item Id",
             "type": "string"
           },
+          "next_round_first_clue": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LevelClue"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Уровень 1 следующего раунда для предзагрузки (ADR 0080): только в ревиле, в нерейтинговых комнатах с очками по уровню (`features.preload_next_round`); ссылка раунд не открывает, таймер не стартует. `null` - поля нет"
+          },
           "persons": {
             "items": {
               "$ref": "#/components/schemas/PersonOut"

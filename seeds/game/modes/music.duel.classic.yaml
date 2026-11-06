@@ -50,3 +50,7 @@ session:
   chat:
     emotes: [match.emotes.wow, match.emotes.gg, match.emotes.fire, match.emotes.laugh, match.emotes.think]
     phrases: [match.phrases.good_luck, match.phrases.well_played, match.phrases.nice_one, match.phrases.so_close]
+
+# Предзагрузка уровня 1 следующего раунда в ревиле (ADR 0080): нерейтинговая дуэль, очки по уровню.
+features:
+  preload_next_round: true

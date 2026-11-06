@@ -440,3 +440,36 @@ test("плашка «Вы в комнате»: сервер помнит ком�
   await createRoomFromHub(page, "music.duel.classic");
   await expect(page).toHaveURL(/\/room\/[A-HJ-NP-Z2-9]{8}$/);
 });
+
+test("ревил: файл уровня 1 следующего раунда качается заранее и используется на старте (ADR 0080)", async ({
+  page,
+  player,
+  scenario,
+}) => {
+  await scenario({ match: { nextRoundPreload: true, revealMs: 4_000 } });
+  await login(page);
+  const code = await createRoom(page, "music.duel.classic");
+  const rival = await player("rival");
+  await joinRoom(rival, code);
+  await page.getByTestId("ready-toggle").click();
+  await rival.getByTestId("ready-toggle").click();
+  await page.getByTestId("start-match").click();
+  await expect(page.getByTestId("clue-audio")).toBeAttached();
+
+  const media: string[] = [];
+  page.on("request", (r) => {
+    if (r.method() === "GET" && r.url().includes("/media/a/"))
+      media.push(new URL(r.url()).pathname);
+  });
+  await answer(page, "Группа крови");
+  await expect(page.getByTestId("reveal-title")).toHaveText("Группа крови");
+
+  // Во время ревила файл следующего раунда уже скачан (раунд ещё не открыт).
+  await expect.poll(() => media.length).toBeGreaterThan(0);
+  const preloaded = media[0]!;
+
+  // Старт следующего раунда берёт готовый blob: повторного скачивания нет.
+  await expect(page.getByTestId("match-round")).toHaveText("Раунд 2 из 2");
+  await expect(page.getByTestId("clue-audio")).toHaveAttribute("src", /^blob:/);
+  expect(media.filter((u) => u === preloaded)).toHaveLength(1);
+});

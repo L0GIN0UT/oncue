@@ -185,6 +185,7 @@ def _match(m: MatchState | None) -> Json | None:
         "clue": _clue(m.clue),
         "final_clue": _clue(m.final_clue),
         "artwork": _clue(m.artwork),
+        "next_round_first_clue": _clue(m.next_round_first_clue),
         "records": [
             {
                 "index": r.index,
@@ -288,6 +289,7 @@ def encode(room: Room) -> Json:
             "title_key": m.title_key,
             "ranked": m.ranked,
             "ladder": m.ladder,
+            "preload_next_round": m.preload_next_round,
         },
         "template": {
             "players_min": t.players_min,
@@ -488,6 +490,7 @@ def _read_match(d: Json | None) -> MatchState | None:
         clue=_read_clue(d.get("clue")),
         final_clue=_read_clue(d.get("final_clue")),
         artwork=_read_clue(d.get("artwork")),
+        next_round_first_clue=_read_clue(d.get("next_round_first_clue")),
         records=[
             RoundRecord(
                 index=int(r["index"]),
@@ -601,6 +604,7 @@ def _decode(d: Json) -> Room:
             title_key=str(m["title_key"]),
             ranked=bool(m.get("ranked", False)),
             ladder=m.get("ladder"),
+            preload_next_round=bool(m.get("preload_next_round", False)),
         ),
         template=RoomTemplate(
             players_min=int(t["players_min"]),

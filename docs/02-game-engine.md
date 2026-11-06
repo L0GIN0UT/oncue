@@ -214,7 +214,7 @@ Source `collection` (`register_collection`) подключается в game н�
 3. Запущенные сессии доигрываются на своей версии (`mode_key@version` в сессии).
 4. Откат = публикация предыдущей версии как новой.
 5. `features.*` в конфиге — продуктовые настройки режима. Включение режима для части пользователей (процент, роли) — через глобальные фича-флаги Unleash (`libs/flags`).
-   `features.preload_next_round` ([ADR 0077](adr/0077-next-round-preload.md)) — в ответе на ход и в снимке приходит `next_round_first_clue` (уровень 1 следующего раунда); валидатор запрещает флаг в онлайне и при скорере с `time_based = True`.
+   `features.preload_next_round` ([ADR 0077](adr/0077-next-round-preload.md)) — в ответе на ход и в снимке приходит `next_round_first_clue` (уровень 1 следующего раунда); валидатор запрещает флаг в рейтинговых режимах и при скорере с `time_based = True`. В комнатах ([ADR 0080](adr/0080-online-next-round-preload.md)) флаг допустим для нерейтинговых режимов с очками по уровню: match отдаёт `next_round_first_clue` в `reveal`; `next_level_clue` не выдаётся нигде.
 
 ## 7. Сравнение ответов (AnswerMatcher)
 

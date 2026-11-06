@@ -346,6 +346,7 @@ def test_every_online_rule_code_is_covered() -> None:
 def test_ranked_with_ladder_is_valid(seed_body: SeedBody) -> None:
     body = seed_body("film.duel.frame")
     body["session"].update(ranked=True, ladder="film.classic")
+    body.pop("features", None)  # предзагрузка в рейтинге запрещена (ADR 0080)
     assert _issues(body) == []
 
 

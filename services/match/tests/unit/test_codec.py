@@ -34,8 +34,12 @@ def test_saved_v1_snapshot_is_readable_and_stable() -> None:
         # ходов), читаются по умолчанию; старое окно ops («user:op» → полный ответ)
         # сжимается до статуса и кода по игрокам; остальное не меняется при перезаписи.
         encoded = encode(room)
-        same = set(data) - {"ops", "match", "seats", "settings"}
+        same = set(data) - {"ops", "match", "seats", "settings", "mode"}
         assert {k: encoded[k] for k in same} == {k: data[k] for k in same}
+        # preload_next_round режима (ADR 0080) - новое поле с умолчанием False.
+        assert encoded["mode"].pop("preload_next_round") is False
+        assert encoded["mode"] == data["mode"]
+        assert encoded["match"]["next_round_first_clue"] is None
         assert encoded["start_error"] is None
         # Название комнаты добавлено после снимка: читается как «не задано», остальное то же.
         assert encoded["settings"].pop("name") is None

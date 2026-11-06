@@ -45,6 +45,8 @@ export type MatchScenario = {
   /** rating недоступен: `/changes` отвечает 503. */
   ratingDown?: boolean;
   revealMs?: number;
+  /** В ревиле не последнего раунда отдаётся `next_round_first_clue` (ADR 0080). */
+  nextRoundPreload?: boolean;
 };
 
 type ModeDef = {
@@ -430,7 +432,8 @@ export class MatchWorld {
       clue: room.phase === "level_open" ? m.clue : null,
       // Мок таймер не держит: затвор подтверждений загрузки всегда открыт.
       awaiting_clips: false,
-      reveal: revealing && item ? this.revealOf(item) : null,
+      reveal:
+        revealing && item ? this.revealOf(item, room.phase === "reveal" ? room : undefined) : null,
       players: room.players.map((p) => {
         const r = m.per.get(p.user_id);
         return {
@@ -465,13 +468,36 @@ export class MatchWorld {
     };
   }
 
-  revealOf(item: MockItem) {
+  revealOf(item: MockItem, room?: MockRoom) {
     return {
       media_item_id: item.id,
       title: item.title,
       year: item.year,
       persons: [{ name: item.person.name, role: item.person.role }],
       final_clue: null,
+      ...(room ? { next_round_first_clue: this.nextFirstClue(room) } : {}),
+    };
+  }
+
+  /** Уровень 1 следующего раунда: только по флагу сценария и если следующий раунд есть. */
+  nextFirstClue(room: MockRoom): S["LevelClue"] | null {
+    const m = room.match;
+    const next = m ? m.items[m.roundIndex + 1] : undefined;
+    if (!this.scenario.nextRoundPreload || !m || !next || m.roundIndex + 1 >= room.settings.rounds)
+      return null;
+    const kind = room.def.ref.domain === "music" ? "audio" : "image";
+    return {
+      level: 1,
+      kind,
+      url: this.world.assetUrl(
+        kind,
+        kind === "audio" ? 2 : 0,
+        kind === "image" ? 12 : 0,
+        ITEMS.indexOf(next) + 1,
+      ),
+      expires_at: new Date(this.now() + 60_000).toISOString(),
+      mime: kind === "audio" ? "audio/wav" : "image/svg+xml",
+      meta: kind === "audio" ? { seconds: 2 } : { blur_px: 12 },
     };
   }
 
@@ -651,7 +677,7 @@ export class MatchWorld {
     this.setPhase(room, "reveal", this.scenario.revealMs ?? 1_500);
     this.publish(room, "round_reveal", {
       round_index: m.roundIndex,
-      ...this.revealOf(item),
+      ...this.revealOf(item, room),
       results: room.players.map((p) => {
         const r = m.per.get(p.user_id);
         return {

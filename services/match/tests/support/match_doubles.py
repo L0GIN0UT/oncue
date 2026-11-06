@@ -77,6 +77,8 @@ def ranked_bodies() -> dict[str, dict[str, Any]]:
     """Рейтинговые дуэли ladder-ов ``music``/``film`` для очередей (сиды 4b — шаг 0b)."""
     music = seed_body("music.duel.classic", ranked=True, ladder="music")
     film = seed_body("film.duel.frame", ranked=True, ladder="film")
+    for body in (music, film):
+        body.pop("features", None)  # предзагрузка в рейтинге запрещена валидатором (ADR 0080)
     return {
         "music.duel.ranked": {**music, "key": "music.duel.ranked"},
         "film.duel.ranked": {**film, "key": "film.duel.ranked"},

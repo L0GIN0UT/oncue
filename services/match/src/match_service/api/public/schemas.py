@@ -397,6 +397,14 @@ class RoundReveal(BaseModel):
             "`null` — картинки нет или она недоступна"
         ),
     )
+    next_round_first_clue: LevelClue | None = Field(
+        default=None,
+        description=(
+            "Уровень 1 следующего раунда для предзагрузки (ADR 0080): только в ревиле, в "
+            "нерейтинговых комнатах с очками по уровню (`features.preload_next_round`); "
+            "ссылка раунд не открывает, таймер не стартует. `null` - поля нет"
+        ),
+    )
 
 
 class MatchView(BaseModel):

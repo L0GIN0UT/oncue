@@ -580,6 +580,7 @@ def _open_level(room: Room, now_ms: int) -> list[Need]:
     match.clue = None
     match.final_clue = None
     match.artwork = None
+    match.next_round_first_clue = None
     match.clue_pending = True
     match.clip_gate = None
     room.touch(now_ms)
@@ -718,14 +719,27 @@ def _finish_round(room: Room, rules: MatchRules, now_ms: int, *, void: bool) -> 
 
 
 def set_final_clue(
-    room: Room, round_index: int, clue: Clue | None, artwork: Clue | None = None
+    room: Room,
+    round_index: int,
+    clue: Clue | None,
+    artwork: Clue | None = None,
+    next_first: Clue | None = None,
 ) -> None:
-    """Ассет ревила и картинка ответа раунда получены (если ревил ещё идёт)."""
+    """Ассет ревила, картинка ответа и предзагрузка следующего раунда получены (ревил идёт)."""
     match = room.match
     if match is None or room.phase is not Phase.REVEAL or match.round_index != round_index:
         return
     match.final_clue = clue
     match.artwork = artwork
+    match.next_round_first_clue = next_first
+
+
+def set_next_first_clue(room: Room, round_index: int, clue: Clue | None) -> None:
+    """Ссылка предзагрузки перевыдана или снята (если ревил этого раунда ещё идёт)."""
+    match = room.match
+    if match is None or room.phase is not Phase.REVEAL or match.round_index != round_index:
+        return
+    match.next_round_first_clue = clue
 
 
 def set_artwork(room: Room, round_index: int, artwork: Clue | None) -> None:

@@ -77,6 +77,8 @@ class ModeInfo:
         title_key: Ключ i18n названия.
         ranked: Рейтинговый режим (только очередь подбора, этап 4b).
         ladder: Ladder рейтинга.
+        preload_next_round: В ревиле отдаётся ссылка на уровень 1 следующего раунда (ADR 0080):
+            флаг режима, только нерейтинговый и без очков по времени.
     """
 
     key: str
@@ -86,6 +88,7 @@ class ModeInfo:
     title_key: str
     ranked: bool = False
     ladder: str | None = None
+    preload_next_round: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -380,6 +383,8 @@ class MatchState:
         clue: Ссылка открытого уровня (одна на комнату, раунд и уровень, D11).
         final_clue: Ассет ревила текущего раунда.
         artwork: Картинка ответа текущего раунда (``Clue`` уровня 1) — только в ревиле.
+        next_round_first_clue: Уровень 1 следующего раунда для предзагрузки (ADR 0080) -
+            только в ревиле и только если режим разрешает; ссылка раунд не открывает.
         started_at_ms: Когда кончился отсчёт (``MatchStarted``).
         started_written: ``MatchStarted`` записан в outbox.
         finished_written: Итог и ``MatchFinished`` записаны в Postgres.
@@ -404,6 +409,7 @@ class MatchState:
     clue: Clue | None = None
     final_clue: Clue | None = None
     artwork: Clue | None = None
+    next_round_first_clue: Clue | None = None
     records: list[RoundRecord] = field(default_factory=list)
     finish: MatchFinish | None = None
     abort_reason: str | None = None

@@ -64,7 +64,11 @@ export function MatchStage({ code, state, store, clock, myId, bubbles, act, comm
   const [busy, setBusy] = useState(false);
   const [confirmForfeit, setConfirmForfeit] = useState(false);
   const [progress, setProgress] = useState<{ tag: string; value: number | null } | null>(null);
-  const clue = useLevelClue(code, room.phase === "level_open" ? match?.clue : null);
+  const clue = useLevelClue(
+    code,
+    room.phase === "level_open" ? match?.clue : null,
+    match?.round_index,
+  );
   const Clue = clue.data ? clueRegistry[clue.data.kind] : null;
   const confirmedTag = useRef<string | null>(null);
   const [clipRetry, setClipRetry] = useState(0);

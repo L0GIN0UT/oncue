@@ -1,8 +1,8 @@
 """Флаг ``features.preload_next_round`` (предзагрузка уровня 1 следующего раунда).
 
-Безопасен только там, где у клиента нет выигрыша от раннего доступа к ссылке: соло без
-скорера по времени. Рейтинговый и любой онлайн-режим, а также скорер по времени
-(``by_speed``, ``party_speed``) флаг не принимают.
+Безопасен только там, где у клиента нет выигрыша от раннего доступа к ссылке: без скорера по
+времени и не в рейтинге (ADR 0077, 0078). Соло и нерейтинговые онлайн-режимы с очками по уровню
+флаг принимают (ADR 0080); рейтинговые и скорер по времени (``by_speed``, ``party_speed``) - нет.
 """
 
 from __future__ import annotations
@@ -67,13 +67,29 @@ def test_ranked_rejects_the_flag(key: str, seed_body: SeedBody) -> None:
     assert ConfigIssue(FLAG, PRELOAD_UNSAFE) in _issues(body)
 
 
-@pytest.mark.parametrize("key", ["film.duel.frame", "film.party.frame", "film.lobby.collection"])
-def test_online_modes_reject_the_flag_until_match_supports_it(
-    key: str, seed_body: SeedBody
-) -> None:
+@pytest.mark.parametrize("key", ["film.duel.frame", "music.duel.classic"])
+def test_unranked_online_by_level_accepts_the_flag(key: str, seed_body: SeedBody) -> None:
+    body = seed_body(key)
+    assert body["session"].get("ranked", False) is False
+    assert body["scoring"]["type"] == "by_level"
+    body.setdefault("features", {})[PRELOAD_FEATURE] = True
+    assert _issues(body) == []
+
+
+@pytest.mark.parametrize(
+    "key", ["film.duel.lite", "film.party.frame", "film.lobby.collection", "music.lobby.classic"]
+)
+def test_online_time_based_modes_reject_the_flag(key: str, seed_body: SeedBody) -> None:
     body = seed_body(key)
     body.setdefault("features", {})[PRELOAD_FEATURE] = True
     assert ConfigIssue(FLAG, PRELOAD_UNSAFE) in _issues(body)
+
+
+def test_ranked_by_level_rejects_the_flag_even_though_scorer_is_safe(seed_body: SeedBody) -> None:
+    body = seed_body("music.ranked.classic")
+    assert body["scoring"]["type"] == "by_level"
+    body.setdefault("features", {})[PRELOAD_FEATURE] = True
+    assert _issues(body) == [ConfigIssue(FLAG, PRELOAD_UNSAFE)]
 
 
 def test_time_based_scorer_rejects_the_flag(seed_body: SeedBody) -> None:
@@ -108,7 +124,7 @@ def test_unknown_scorer_reports_only_the_scorer_problem(seed_body: SeedBody) -> 
     assert ConfigIssue(FLAG, PRELOAD_UNSAFE) not in issues  # судить о времени не по чему
 
 
-def test_online_with_time_scorer_reports_the_flag_once(seed_body: SeedBody) -> None:
-    body = seed_body("film.party.frame")  # party_speed: онлайн и скорер по времени
+def test_ranked_with_time_scorer_reports_the_flag_once(seed_body: SeedBody) -> None:
+    body = seed_body("film.ranked.lite")  # party_speed: рейтинг и скорер по времени
     body.setdefault("features", {})[PRELOAD_FEATURE] = True
     assert _issues(body).count(ConfigIssue(FLAG, PRELOAD_UNSAFE)) == 1

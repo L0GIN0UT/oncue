@@ -40,6 +40,7 @@ from gv_game_kernel import (
     parse_mode_config,
 )
 from gv_game_kernel.outcome import Placement
+from gv_game_kernel.registry import PRELOAD_FEATURE
 from match_service.domain import errors
 from match_service.domain.errors import MatchInvalidError
 from match_service.domain.model import (
@@ -311,6 +312,9 @@ class RulesFactory:
                 title_key=config.title_i18n,
                 ranked=session.ranked,
                 ladder=session.ladder,
+                preload_next_round=bool(config.features.get(PRELOAD_FEATURE, False))
+                and not session.ranked
+                and not engine.scorer.time_based,
             ),
             template=RoomTemplate(
                 players_min=session.players.min,

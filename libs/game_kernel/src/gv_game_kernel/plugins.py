@@ -565,7 +565,8 @@ class Scorer(Protocol):
         requires_early_end: Нужно правило досрочного завершения (``EndRule.ends_early``):
             серия без «жизней» не заканчивается на промахе.
         time_based: Очки зависят от времени (`RoundOutcome.elapsed_ms`): ранний доступ к ссылке
-            даёт преимущество, поэтому предзагрузка (`features.preload_next_round`) запрещена.
+            даёт преимущество, поэтому предзагрузка (`features.preload_next_round`) запрещена
+            (ADR 0077, 0080).
     """
 
     key: ClassVar[str]

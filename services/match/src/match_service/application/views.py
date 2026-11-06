@@ -157,6 +157,7 @@ def _reveal(match: MatchState) -> Json:
         "persons": [{"name": p.name, "role": p.role} for p in key.persons],
         "final_clue": clue_json(match.final_clue),
         "artwork": artwork_json(match.artwork),
+        "next_round_first_clue": clue_json(match.next_round_first_clue),
     }
 
 
@@ -281,6 +282,9 @@ def _round_reveal(room: Room, index: int) -> Json | None:
         "persons": [{"name": p.name, "role": p.role} for p in key.persons],
         "final_clue": clue_json(match.final_clue) if match.round_index == index else None,
         "artwork": artwork_json(match.artwork) if match.round_index == index else None,
+        "next_round_first_clue": (
+            clue_json(match.next_round_first_clue) if match.round_index == index else None
+        ),
         "results": [
             {
                 "user_id": str(r.user_id),

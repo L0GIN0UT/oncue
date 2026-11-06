@@ -483,6 +483,17 @@
           "format": "uuid",
           "type": "string"
         },
+        "next_round_first_clue": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LevelClue"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Необязательное: уровень 1 следующего раунда для предзагрузки (ADR 0080); только в нерейтинговых комнатах с очками по уровню, ссылка раунд не открывает; null — поля нет"
+        },
         "persons": {
           "items": {
             "additionalProperties": false,

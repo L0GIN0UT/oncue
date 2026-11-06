@@ -776,7 +776,7 @@ class RoomOwner:
                 needs.extend(await self._resolve(room, rules, need))
         if rules is not None:
             match_fsm.refresh_statuses(room, rules)
-        await self._refresh_artwork(room)
+        await self._refresh_artwork(room, rules)
         await self._ranked_abort(room)
         await self._drop_spectators(room)
         if room.is_closed or room.phase is Phase.LOBBY:
@@ -883,7 +883,8 @@ class RoomOwner:
         clue = clue_of(view) if view is not None else None
         if isinstance(need, NeedFinalClue):
             artwork = await self._link_artwork(room, round_, f"{subject}:reveal")
-            match_fsm.set_final_clue(room, need.round_index, clue, artwork)
+            next_first = await self._link_next_first(room, rules, need.round_index)
+            match_fsm.set_final_clue(room, need.round_index, clue, artwork, next_first)
             return []
         return list(
             match_fsm.set_clue(
@@ -923,26 +924,72 @@ class RoomOwner:
                 )
         return None
 
-    async def _refresh_artwork(self, room: Room) -> None:
+    async def _link_next_first(
+        self, room: Room, rules: KernelMatchRules, round_index: int
+    ) -> Clue | None:
+        """Ссылка на уровень 1 СЛЕДУЮЩЕГО раунда для предзагрузки в ревиле (ADR 0080) или ``None``.
+
+        Только если режим разрешил (флаг, не рейтинг, очки не по времени) и следующий раунд есть.
+        Субъект отдельный (``room:{code}:{next}:preload``): ссылка раунд не открывает и не
+        подменяет ссылку самого уровня. Следующий уровень текущего раунда не выдаётся никогда.
+        Любой сбой - ``None``: ревил цел, клиент грузит клип как обычно.
+        """
+        match = room.match
+        mode = room.mode
+        if match is None or not mode.preload_next_round or mode.ranked:
+            return None
+        nxt = round_index + 1
+        if nxt >= match.rounds_total or nxt >= len(match.plan):
+            return None
+        return await self._link_first_level(
+            room, rules, match.plan[nxt], f"room:{room.code}:{nxt}:preload"
+        )
+
+    async def _link_first_level(
+        self, room: Room, rules: KernelMatchRules, round_: PlannedRound, subject: str
+    ) -> Clue | None:
+        for attempt in range(2):  # один повтор, как у остальных ссылок
+            try:
+                view = await rules.clue(round_, 1, assets=self._assets, subject=subject)
+            except GoneError:
+                return None
+            except AppError as exc:
+                log.warning(
+                    "match.preload_unavailable", room=room.code, code=exc.code, attempt=attempt
+                )
+            except Exception:
+                log.exception("match.preload_failed", room=room.code, attempt=attempt)
+            else:
+                return clue_of(view) if view is not None else None
+        return None
+
+    async def _refresh_artwork(self, room: Room, rules: KernelMatchRules | None = None) -> None:
         """Перевыдать ссылку на картинку, пока ревил идёт, а ссылка истекает или истекла.
 
         Субъект тот же (``room:{code}:{round}:reveal``). Пока ссылка жива, сбой перевыдачи
         повторится на следующем тике; истёкшая и не перевыданная ссылка снимается (``null``).
         """
         match = room.match
-        if match is None or room.phase is not Phase.REVEAL or match.artwork is None:
+        if match is None or room.phase is not Phase.REVEAL:
             return
         now = self._now()
-        if match.artwork.expires_at_ms - now > self._settings.artwork_refresh_margin_ms:
-            return
+        margin = self._settings.artwork_refresh_margin_ms
         index = match.round_index
-        fresh = await self._link_artwork(
-            room, match.plan[index], f"room:{room.code}:{index}:reveal"
-        )
-        if fresh is not None:
-            match_fsm.set_artwork(room, index, fresh)
-        elif match.artwork.expires_at_ms <= now:
-            match_fsm.set_artwork(room, index, None)
+        if match.artwork is not None and match.artwork.expires_at_ms - now <= margin:
+            fresh = await self._link_artwork(
+                room, match.plan[index], f"room:{room.code}:{index}:reveal"
+            )
+            if fresh is not None:
+                match_fsm.set_artwork(room, index, fresh)
+            elif match.artwork.expires_at_ms <= now:
+                match_fsm.set_artwork(room, index, None)
+        nxt = match.next_round_first_clue
+        if nxt is not None and nxt.expires_at_ms - now <= margin and rules is not None:
+            fresh_clue = await self._link_next_first(room, rules, index)
+            if fresh_clue is not None:
+                match_fsm.set_next_first_clue(room, index, fresh_clue)
+            elif nxt.expires_at_ms <= now:
+                match_fsm.set_next_first_clue(room, index, None)
 
     @staticmethod
     def unpersisted(room: Room) -> bool:

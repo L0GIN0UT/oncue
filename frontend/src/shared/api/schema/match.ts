@@ -1817,6 +1817,8 @@ export interface components {
              * Format: uuid
              */
             media_item_id: string;
+            /** @description Уровень 1 следующего раунда для предзагрузки (ADR 0080): только в ревиле, в нерейтинговых комнатах с очками по уровню (`features.preload_next_round`); ссылка раунд не открывает, таймер не стартует. `null` - поля нет */
+            next_round_first_clue?: components["schemas"]["LevelClue"] | null;
             /** Persons */
             persons: components["schemas"]["PersonOut"][];
             /** Title */

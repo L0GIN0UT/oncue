@@ -4,14 +4,16 @@
  * тем же реестром `clueRegistry`, результаты игроков — уровень угадывания и очки раунда.
  * Обложка или постер — `reveal.artwork`; нет его — заглушка.
  */
+import { useQueryClient } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
+import { useEffect } from "react";
 import type { Domain, PlayerSlot } from "@/shared/api/types";
 import type { RoundRevealDelta } from "@/shared/realtime";
 import { useDynamicT } from "@/shared/i18n/dynamic";
 import { AnswerArt } from "@/features/game/AnswerArt";
 import { RevealSave } from "@/features/game/RevealSave";
 import { clueRegistry } from "@/features/game/clues/registry";
-import { useLevelClue } from "./use-level-clue";
+import { preloadLevelClue, useLevelClue } from "./use-level-clue";
 
 type Props = {
   code: string;
@@ -24,6 +26,13 @@ export function RoundRevealPanel({ code, reveal, players, domain }: Props) {
   const t = useTranslations();
   const dt = useDynamicT();
   const finalClue = useLevelClue(code, reveal.final_clue);
+  // Уровень 1 следующего раунда качаем заранее: раунд стартует без паузы (ADR 0080).
+  const client = useQueryClient();
+  const nextFirst = reveal.next_round_first_clue;
+  const nextRound = reveal.round_index + 1;
+  useEffect(() => {
+    if (nextFirst) void preloadLevelClue(client, code, nextRound, nextFirst);
+  }, [client, code, nextFirst, nextRound]);
   const Clue = finalClue.data ? clueRegistry[finalClue.data.kind] : null;
   const names = new Map(players.map((p) => [p.user_id, p.nickname]));
   const results = [...reveal.results].sort((a, b) => b.score - a.score);
