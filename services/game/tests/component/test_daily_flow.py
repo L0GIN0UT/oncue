@@ -402,4 +402,4 @@ async def test_frame_clue_meta_uses_kernel_hint_fields(game: Any) -> None:
     assert clue.status_code == 200, clue.text
     meta = {k: v for k, v in clue.json()["meta"].items() if v is not None}
     first = yaml.safe_load(FILM_RANDOM_SEED.read_text("utf-8"))["clue"]["params"]["levels"][0]
-    assert meta == {"blur_px": first["blur_px"], "crop": first["crop"]}
+    assert meta == {"blur_px": first["blur_px"], "crop": first.get("crop", 1.0)}

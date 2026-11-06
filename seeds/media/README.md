@@ -257,7 +257,7 @@ uv run gv dev seed-real --without-synthetic --real-dir C:/gv-media --import-dir 
 ## Правка профиля ассетов на уже засеянном стенде
 
 Параметры профилей лежат в `services/media_pipeline/src/media_pipeline_service/config/asset_profiles.yaml`
-(кадры - `frame_progressive/default`: размытие 25, 20, 15, 10, 5, 0 px). Правка меняет
+(кадры - `frame_progressive/default`: размытие 40, 30, 20, 10, 4, 0 px). Правка меняет
 `params_hash`, поэтому у уже загруженных единиц нужны новые наборы:
 
 ```bash

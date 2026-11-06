@@ -23,7 +23,7 @@ export const AUTHOR_ID = "00000000-0000-4000-8000-000000000902";
 
 const FRAME_LEVELS = [48, 32, 20, 12, 6, 0].map((blur_px, i) => ({
   index: i + 1,
-  hint: { blur_px, crop: [0.35, 0.5, 0.7, 1, 1, 1][i] ?? 1 },
+  hint: { blur_px, crop: 1 },
 }));
 const AUDIO_LEVELS = [0.5, 1, 2, 4, 8, 15].map((seconds, i) => ({
   index: i + 1,
