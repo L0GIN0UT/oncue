@@ -32,6 +32,15 @@ beforeEach(() => {
 });
 
 describe("SiteHeader", () => {
+  it("знак ведёт на главную: имя «Guessverse», внутри логотип и два слова", () => {
+    renderWithProviders(<SiteHeader />);
+    const logo = screen.getByTestId("nav-logo");
+    expect(logo).toHaveAttribute("href", "/");
+    expect(logo).toHaveAccessibleName(/^Guessverse/);
+    expect(within(logo).getByTestId("wordmark-logo")).toBeInTheDocument();
+    expect(within(logo).getByTestId("wordmark-verse")).toHaveTextContent("verse");
+  });
+
   it("навигация «Главная / Соло / Онлайн / Сборники» со ссылками", () => {
     renderWithProviders(<SiteHeader />);
     const nav = screen.getByRole("navigation", { name: "Разделы" });

@@ -40,7 +40,6 @@ export function SiteHeader() {
     staleTime: 30_000,
   });
   const balance = blockData(profile.data?.blocks.wallet)?.total ?? null;
-  const Note = icons.music;
   const Verses = icons.verses;
   const Leaders = icons.leaders;
 
@@ -50,11 +49,8 @@ export function SiteHeader() {
         href="/"
         aria-label={t("nav.logo")}
         data-testid="nav-logo"
-        className="flex min-w-0 items-center gap-2.5 md:flex-1"
+        className="flex min-w-0 items-center md:flex-1"
       >
-        <span className="grid size-9 flex-none place-items-center rounded-[10px] bg-music text-night">
-          <Note aria-hidden className="size-5" />
-        </span>
         <Wordmark className="text-2xl leading-none" />
       </Link>
 

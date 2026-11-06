@@ -35,6 +35,14 @@ for (const width of [320, 360, 390]) {
         expect(apart, `элементы шапки ${i} и ${j} пересекаются`).toBe(true);
       }
     }
+    // Знак: логотип и слово целиком на экране, слово не переносится на вторую строку.
+    const logo = await page.getByTestId("nav-logo").boundingBox();
+    const verse = await page.getByTestId("wordmark-verse").boundingBox();
+    expect(logo).not.toBeNull();
+    expect(verse).not.toBeNull();
+    expect(logo!.x).toBeGreaterThanOrEqual(0);
+    expect(verse!.x + verse!.width).toBeLessThanOrEqual(logo!.x + logo!.width + 0.5);
+    expect(logo!.height).toBeLessThanOrEqual(40);
     const overflow = await page.evaluate(
       () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
     );
