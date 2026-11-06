@@ -39,6 +39,7 @@ from bff_web_service.application.dto import (
     LeaderboardCard,
     MatchResult,
     Me,
+    MediaLink,
     Mode,
     MyMatches,
     OpenRooms,
@@ -196,6 +197,21 @@ class CollectionsClient(Protocol):
 
         Нет, скрыт для чужих или удалён — ``UpstreamRejectedError(404)``.
         """
+        ...
+
+    async def cover_items(self, collection_ids: Sequence[UUID]) -> dict[UUID, UUID]:
+        """Первая единица опубликованных публичных сборников (internal, сервисный токен).
+
+        Сборники, которым обложку не дать (закрытые, пустые, неизвестные), в словаре нет.
+        """
+        ...
+
+
+class MediaClient(Protocol):
+    """Internal API media-pipeline."""
+
+    async def cover_links(self, media_item_ids: Sequence[UUID]) -> dict[UUID, MediaLink]:
+        """Ссылки на обложки единиц (одним вызовом); единиц без картинки в словаре нет."""
         ...
 
 

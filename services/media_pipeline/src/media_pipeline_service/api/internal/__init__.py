@@ -10,7 +10,7 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from gv_auth import ServiceAuthenticator, ServicePrincipal
 from gv_service import problem_responses
@@ -53,6 +53,8 @@ class AssetLinkResponse(BaseModel):
 
 class CoverLinksRequest(BaseModel):
     """Запрос ссылок на обложки единиц (предел размера пакета - в настройках сервиса)."""
+
+    model_config = ConfigDict(extra="forbid")
 
     media_item_ids: list[UUID] = Field(min_length=1, max_length=200)
 

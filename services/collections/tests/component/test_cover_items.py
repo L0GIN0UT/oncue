@@ -62,8 +62,14 @@ async def test_only_published_public_collections(svc: Any) -> None:
     hidden = (await svc.published(author))["collection_id"]
     deleted = (await svc.published(author))["collection_id"]
     draft = (await svc.create(author))["collection_id"]
-    await svc.sql_exec("UPDATE collections SET status = 'hidden', hidden_at = now(), hidden_reason = 'x' WHERE id = :i", i=hidden)
-    await svc.sql_exec("UPDATE collections SET status = 'deleted', deleted_at = now() WHERE id = :i", i=deleted)
+    await svc.sql_exec(
+        "UPDATE collections SET status = 'hidden', hidden_at = now(), hidden_reason = 'x' "
+        "WHERE id = :i",
+        i=hidden,
+    )
+    await svc.sql_exec(
+        "UPDATE collections SET status = 'deleted', deleted_at = now() WHERE id = :i", i=deleted
+    )
 
     response = await _post(svc, [public, unlisted, hidden, deleted, draft, uuid7()])
     assert response.status_code == 200, response.text

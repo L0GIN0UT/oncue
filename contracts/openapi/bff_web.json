@@ -1697,6 +1697,17 @@
               }
             ]
           },
+          "cover_artwork": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ResultArtwork"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Картинка (artwork) первой единицы публичного сборника: подписанная ссылка со сроком, стабильная в пределах окна выдачи. `null` - сборник закрытый, без картинки либо источник обложек недоступен: показывайте пресет `cover`."
+          },
           "default_mode_key": {
             "title": "Default Mode Key",
             "type": "string"
@@ -1800,6 +1811,69 @@
         "title": "CollectionCover",
         "type": "object"
       },
+      "CollectionCoverItem": {
+        "description": "Обложка одного сборника.",
+        "properties": {
+          "collection_id": {
+            "format": "uuid",
+            "title": "Collection Id",
+            "type": "string"
+          },
+          "cover_artwork": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ResultArtwork"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "collection_id"
+        ],
+        "title": "CollectionCoverItem",
+        "type": "object"
+      },
+      "CollectionCoversOut": {
+        "description": "Обложки запрошенных сборников; для закрытых и без картинки - `cover_artwork: null`.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CollectionCoverItem"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "CollectionCoversOut",
+        "type": "object"
+      },
+      "CollectionCoversRequest": {
+        "additionalProperties": false,
+        "description": "Какие сборники нужны (дубли схлопываются; предел - `GV_PAGES__COVERS_BATCH_MAX`).",
+        "properties": {
+          "collection_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 50,
+            "minItems": 1,
+            "title": "Collection Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "collection_ids"
+        ],
+        "title": "CollectionCoversRequest",
+        "type": "object"
+      },
       "CollectionDetail": {
         "description": "Сборник целиком (``collections /v1/collections/{id}``).",
         "properties": {
@@ -1820,6 +1894,17 @@
                 "type": "null"
               }
             ]
+          },
+          "cover_artwork": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ResultArtwork"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Картинка (artwork) первой единицы публичного сборника: подписанная ссылка со сроком, стабильная в пределах окна выдачи. `null` - сборник закрытый, без картинки либо источник обложек недоступен: показывайте пресет `cover`."
           },
           "default_mode_key": {
             "title": "Default Mode Key",
@@ -7143,6 +7228,53 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/v1/collections/covers": {
+      "post": {
+        "description": "Для карточек, которые фронт берёт напрямую из collections (постраничный каталог и поиск, избранное, «мои сборники»): тело `{collection_ids: [до 50]}`, ответ - `cover_artwork` (картинка первой единицы) для каждого запрошенного id. Только публичные опубликованные сборники; для закрытых, несуществующих и без картинки - `null` (неразличимо). Id единиц не раскрываются. Без токена, не кэшируется; частоту ограничивает gateway, как у остальных публичных ручек. Источники недоступны - 200 с `null`. Больше `GV_PAGES__COVERS_BATCH_MAX` id - 422 `bff.too_many_ids`.",
+        "operationId": "collection_covers_v1_collections_covers_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CollectionCoversRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CollectionCoversOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          }
+        },
+        "summary": "Обложки сборников для списков вне страницы каталога",
+        "tags": [
+          "bff_web"
+        ]
+      }
+    },
     "/v1/meta": {
       "get": {
         "operationId": "meta_v1_meta_get",

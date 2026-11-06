@@ -919,8 +919,7 @@ class SqlCatalogReads:
             .select_from(ci)
             .join(
                 first,
-                (first.c.collection_id == ci.c.collection_id)
-                & (first.c.position == ci.c.position),
+                (first.c.collection_id == ci.c.collection_id) & (first.c.position == ci.c.position),
             )
             .join(_c, _c.c.id == ci.c.collection_id)
             .where(_c.c.status == "published", _c.c.visibility == "public")

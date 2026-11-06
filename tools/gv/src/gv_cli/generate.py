@@ -39,8 +39,14 @@ SERVICE_CLIENTS: dict[str, dict[str, list[str]]] = {
     "progression": {"media_pipeline": ["ugc.image"]},
     "notifications": {"identity": ["users.emails.read", "users.active.list"]},
     # bff_web: очки дейлика друзей у game (приватность решает bff по данным social) и уровни
-    # игроков комнаты и лобби у progression (пачкой, без PII).
-    "bff_web": {"game": ["daily.results"], "progression": ["levels.read"]},
+    # игроков комнаты и лобби у progression (пачкой, без PII); обложки карточек сборников:
+    # первая единица публичных сборников у collections и ссылки на её картинку у media-pipeline.
+    "bff_web": {
+        "game": ["daily.results"],
+        "progression": ["levels.read"],
+        "collections": ["covers.read"],
+        "media_pipeline": ["assets.cover_link"],
+    },
 }
 """Клиенты сервисных токенов для compose (D13 плана этапа 2): клиент → адресат → области.
 

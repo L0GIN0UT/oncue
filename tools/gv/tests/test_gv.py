@@ -247,10 +247,12 @@ def test_generated_identity_compose_has_email_code_settings() -> None:
         "identity": ["users.emails.read", "users.active.list"]
     }
     # bff_web -> game (очки дейлика друзей) и progression (уровни игроков), секрет в
-    # GV_SERVICE_SECRET_BFF_WEB.
+    # GV_SERVICE_SECRET_BFF_WEB; обложки сборников - collections (covers.read) и media_pipeline.
     assert clients["bff_web"]["audiences"] == {
         "game": ["daily.results"],
         "progression": ["levels.read"],
+        "collections": ["covers.read"],
+        "media_pipeline": ["assets.cover_link"],
     }
     assert service_secret_env("bff_web") == "GV_SERVICE_SECRET_BFF_WEB"
     secrets_seen = set()

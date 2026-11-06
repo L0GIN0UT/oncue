@@ -325,6 +325,7 @@
         "type": "object"
       },
       "CoverLinksRequest": {
+        "additionalProperties": false,
         "description": "Запрос ссылок на обложки единиц (предел размера пакета - в настройках сервиса).",
         "properties": {
           "media_item_ids": {

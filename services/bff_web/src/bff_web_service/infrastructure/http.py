@@ -200,14 +200,29 @@ class UpstreamHttp:
             UpstreamUnavailableError: цепь разомкнута, таймаут, сеть, 5xx или 429.
             UpstreamRejectedError: прочие 4xx (код из Problem Details).
         """
+        return await self._send("GET", path, token=token, params=params, body=None)
+
+    async def post_json(self, path: str, *, token: str | None, body: Mapping[str, Any]) -> bytes:
+        """POST JSON в источник (пакетные internal-ручки чтения); ошибки как у ``get``."""
+        return await self._send("POST", path, token=token, params=None, body=body)
+
+    async def _send(
+        self,
+        method: str,
+        path: str,
+        *,
+        token: str | None,
+        params: Mapping[str, str] | None,
+        body: Mapping[str, Any] | None,
+    ) -> bytes:
         if not self._breaker.allow():
             UPSTREAM_REQUESTS.labels(self.service, "circuit_open").inc()
             raise UpstreamUnavailableError(self.service, "circuit_open")
         started = time.perf_counter()
         try:
             async with asyncio.timeout(self._timeout_s):
-                response = await self._client.get(
-                    path, params=params, headers=outgoing_headers(token)
+                response = await self._client.request(
+                    method, path, params=params, json=body, headers=outgoing_headers(token)
                 )
         except TimeoutError as exc:
             raise self._unavailable("timeout") from exc

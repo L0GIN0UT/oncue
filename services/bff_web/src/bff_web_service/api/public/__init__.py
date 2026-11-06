@@ -1,6 +1,7 @@
 """Публичный API (/v1). На gateway: /api/web/v1/....
 
-Только GET (D4): мутаций нет, поэтому CSRF и идемпотентность не нужны. Токен берётся из
+Только чтение (D4): мутаций нет, поэтому CSRF и идемпотентность не нужны (единственный POST,
+``/collections/covers``, - пакетное чтение без токена и без побочных эффектов). Токен берётся из
 ``Authorization: Bearer`` или cookie ``gv_access``, проверяется локально (JWKS identity) и
 уходит источникам как Bearer. Публичные ответы — ``public, max-age, stale-while-revalidate``,
 ответы с токеном — ``private, no-store``; ``Vary`` не даёт общему кэшу отдать анонимную
@@ -20,6 +21,9 @@ from pydantic import BaseModel
 
 from bff_web_service.api.deps import BffDeps
 from bff_web_service.api.public.schemas import (
+    CollectionCoverItem,
+    CollectionCoversOut,
+    CollectionCoversRequest,
     CollectionPage,
     CollectionSort,
     CollectionsPage,
@@ -47,6 +51,7 @@ from bff_web_service.settings import HttpCacheSettings
 from gv_auth import JwtVerifier, extract_token
 from gv_core.errors import (
     DependencyUnavailableError,
+    InvalidInputError,
     UnauthenticatedError,
 )
 from gv_service import problem_responses
@@ -344,6 +349,43 @@ def build_public_router(deps: BffDeps) -> APIRouter:  # noqa: PLR0915 - пере
         )
         _cache_headers(response, personal=not page.cacheable, policy=policy)
         return CollectionsPage.model_validate(page, from_attributes=True)
+
+    @router.post(
+        "/collections/covers",
+        response_model=CollectionCoversOut,
+        summary="Обложки сборников для списков вне страницы каталога",
+        description=(
+            "Для карточек, которые фронт берёт напрямую из collections (постраничный каталог "
+            "и поиск, избранное, «мои сборники»): тело `{collection_ids: [до 50]}`, ответ - "
+            "`cover_artwork` (картинка первой единицы) для каждого запрошенного id. Только "
+            "публичные опубликованные сборники; для закрытых, несуществующих и без картинки "
+            "- `null` (неразличимо). Id единиц не раскрываются. Без токена, не кэшируется; "
+            "частоту ограничивает gateway, как у остальных публичных ручек. Источники "
+            "недоступны - 200 с `null`. Больше `GV_PAGES__COVERS_BATCH_MAX` id - 422 "
+            "`bff.too_many_ids`."
+        ),
+        responses=problem_responses(422),
+    )
+    async def collection_covers(
+        body: CollectionCoversRequest, response: Response
+    ) -> CollectionCoversOut:
+        unique = list(dict.fromkeys(body.collection_ids))
+        if len(unique) > deps.get_collection_covers.batch_max:
+            raise InvalidInputError(
+                "слишком много сборников в запросе",
+                code="bff.too_many_ids",
+                details={"given": len(unique), "max": deps.get_collection_covers.batch_max},
+            )
+        covers = await deps.get_collection_covers(unique)
+        response.headers["Cache-Control"] = "no-store"
+        return CollectionCoversOut(
+            items=[
+                CollectionCoverItem.model_validate(
+                    {"collection_id": cid, "cover_artwork": asdict(art) if art else None}
+                )
+                for cid, art in covers.items()
+            ]
+        )
 
     @router.get(
         "/pages/collections/{collection_id}",
