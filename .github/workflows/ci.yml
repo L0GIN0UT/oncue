@@ -128,7 +128,7 @@ jobs:
             echo "present=false" >> "$GITHUB_OUTPUT"
             echo "::notice::frontend/package.json отсутствует — проверки фронтенда пропущены"
           fi
-      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413  # v6.1.0
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115  # v6.1.1
         if: steps.app.outputs.present == 'true'
         with: { package_json_file: frontend/package.json }  # версия — из поля packageManager
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1  # v7.1.0
@@ -279,7 +279,7 @@ jobs:
           echo "::add-mask::${GV_SERVICE_SECRET_ADMIN}"
           uv run gv dev seed
           echo "E2E_SEEDED=1" >> "$GITHUB_ENV"
-      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413  # v6.1.0
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115  # v6.1.1
         if: steps.app.outputs.present == 'true'
         with: { package_json_file: frontend/package.json }
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1  # v7.1.0
