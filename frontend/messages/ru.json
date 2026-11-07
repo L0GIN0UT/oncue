@@ -48,8 +48,7 @@
         "in_progress": "продолжить",
         "finished": "сыгран · {score} из {max}"
       },
-      "unavailable": "сейчас недоступен",
-      "frameAlt": "Кадр дня"
+      "unavailable": "сейчас недоступен"
     },
     "progress": {
       "cap": "Твой прогресс",

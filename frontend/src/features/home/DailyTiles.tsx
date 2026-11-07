@@ -1,14 +1,14 @@
 "use client";
 /**
- * Плитки дейликов главной (макет Home): музыка — акцентная, кино — обычная. Плитка ведёт на
- * `/play/<mode_key>` (старт или возобновление сессии) либо на итоги, если дейлик сыгран.
+ * Плитки дейликов главной (макет Home): музыка — акцентная, кино — обычная; у обеих крупная
+ * фоновая иконка справа. Плитка ведёт на `/play/<mode_key>` (старт или возобновление сессии)
+ * либо на итоги, если дейлик сыгран.
  */
 import { useTranslations } from "next-intl";
 import type { DailyCard, Domain } from "@/shared/api/types";
 import { cn } from "@/shared/lib/cn";
 import { formatClock, remainingUntil } from "@/features/daily/countdown-time";
 import { useNow } from "@/features/daily/use-now";
-import { Cover } from "@/shared/ui/cover";
 import { Tile } from "@/shared/ui/tile";
 import { useIcons } from "@/shared/ui/theme-provider";
 
@@ -62,36 +62,18 @@ export function DailyTile({ domain, card }: { domain: Domain; card: DailyCard | 
       accent={music}
       cap={t(`home.daily.${domain}.cap`)}
       aside={card ? <ResetChip target={card.next_reset_at} /> : undefined}
-      title={music ? t(`home.daily.${domain}.title`) : undefined}
-      subtitle={music ? t(`home.daily.${domain}.subtitle`) : undefined}
+      title={t(`home.daily.${domain}.title`)}
+      subtitle={t(`home.daily.${domain}.subtitle`)}
       href={card ? dailyHref(card) : undefined}
       data-testid={`home-daily-${domain}`}
       className="min-h-[196px]"
     >
-      {music ? (
-        <Icon
-          aria-hidden
-          className="pointer-events-none absolute top-10 -right-3 size-24 text-stage-raised"
-          strokeWidth={1.5}
-        />
-      ) : (
-        <div className="relative flex items-start gap-3">
-          <Cover
-            ratio="frame"
-            alt={t("home.daily.frameAlt")}
-            className="w-[116px] flex-none"
-            placeholder={<Icon className="size-6" />}
-          />
-          <div className="flex min-w-0 flex-col gap-1.5">
-            <span className="font-display text-xl leading-[1.1] font-extrabold tracking-[-0.02em]">
-              {t("home.daily.film.title")}
-            </span>
-            <span className="text-[13px] leading-[1.45] text-ink-muted">
-              {t("home.daily.film.subtitle")}
-            </span>
-          </div>
-        </div>
-      )}
+      {/* Фоновая иконка справа у обеих плиток: единый вид музыки и кино. */}
+      <Icon
+        aria-hidden
+        className="pointer-events-none absolute top-10 -right-3 size-24 text-stage-raised"
+        strokeWidth={1.5}
+      />
       <div className="relative mt-auto flex items-center justify-between gap-3">
         <StatusChip card={card} />
         {music && card && card.status !== "finished" && (
