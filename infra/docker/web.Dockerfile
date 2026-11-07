@@ -26,9 +26,12 @@ ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1 \
     HOSTNAME=0.0.0.0 \
     PORT=3000
-# Только результат standalone-сборки: сервер, статика; без исходников и dev-зависимостей.
+# Только результат standalone-сборки: сервер, статика и public/ (логотип и прочие файлы, которые
+# Next отдаёт по корневым путям; standalone-сборка их сама не включает); без исходников и
+# dev-зависимостей.
 COPY --from=build --chown=node:node /app/.next/standalone ./
 COPY --from=build --chown=node:node /app/.next/static ./.next/static
+COPY --from=build --chown=node:node /app/public ./public
 USER node
 EXPOSE 3000
 HEALTHCHECK --interval=10s --timeout=3s --start-period=15s --retries=6 \
