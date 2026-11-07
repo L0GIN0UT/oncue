@@ -59,7 +59,7 @@ services:
   # Продление сертификатов Let's Encrypt (webroot). Включается профилем на проде:
   #   docker compose -f compose.gateway.yml --profile certbot up -d certbot
   certbot:
-    image: certbot/certbot:v3.1.0
+    image: certbot/certbot:v5.9.0
     profiles: [certbot]
     restart: unless-stopped
     networks: [backend]
