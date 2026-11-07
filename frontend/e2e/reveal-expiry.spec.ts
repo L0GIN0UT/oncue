@@ -41,8 +41,15 @@ test("регресс хвоста этапа 2: старая ссылка рев
   expect(finalClue).toEqual([200]);
 });
 
-test("музыка: аудио-ревил и обложка — обложка на месте, кадра нет", async ({ page, scenario }) => {
+test("музыка: аудио-ревил и обложка — обложка на месте, кадра, плеера и перемотки нет", async ({
+  page,
+  scenario,
+}) => {
   await scenario({ revealArtwork: true });
+  const finalClue: string[] = [];
+  page.on("request", (r) => {
+    if (/\/rounds\/\d+\/final-clue$/.test(r.url())) finalClue.push(r.url());
+  });
   await page.goto("/play/music.random.classic");
   await expect(page).toHaveURL(/\/play\/s\//);
   await Promise.all([
@@ -51,4 +58,10 @@ test("музыка: аудио-ревил и обложка — обложка �
   ]);
   await expect(page.getByRole("img", { name: /^Обложка/ })).toBeVisible();
   await expect(page.getByTestId("reveal-image")).toHaveCount(0);
+  const reveal = page.getByTestId("reveal");
+  await expect(reveal.getByTestId("reveal-title")).toBeVisible();
+  await expect(reveal.getByTestId("clue-audio")).toHaveCount(0);
+  await expect(reveal.getByRole("button", { name: /Слушать|Пауза/ })).toHaveCount(0);
+  await expect(reveal.getByRole("slider")).toHaveCount(0);
+  expect(finalClue).toEqual([]);
 });

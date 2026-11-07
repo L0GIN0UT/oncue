@@ -3,65 +3,49 @@ import { act, fireEvent, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "@/test/render";
 import { SeekableAudio } from "./SeekableAudio";
-
-const RECT = { left: 0, width: 300, right: 300 } as DOMRect;
+import type { TapeSeekState } from "./types";
 
 afterEach(() => vi.restoreAllMocks());
 
+/** Перемотка идёт снаружи — по ленте подсказок: плеер отдаёт ей `seek` через `onSeekState`. */
 function setup(seconds: number | null, fileDuration = 50) {
   const play = vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue(undefined);
   vi.spyOn(HTMLMediaElement.prototype, "duration", "get").mockReturnValue(fileDuration);
-  renderWithProviders(<SeekableAudio objectUrl="blob:test/1" seconds={seconds} inlineSeek />);
+  const onSeekState = vi.fn();
+  renderWithProviders(
+    <SeekableAudio objectUrl="blob:test/1" seconds={seconds} onSeekState={onSeekState} />,
+  );
   const audio = screen.getByTestId("clue-audio") as HTMLAudioElement;
   fireEvent.loadedMetadata(audio);
-  const bar = screen.getByRole("slider");
-  vi.spyOn(bar, "getBoundingClientRect").mockReturnValue(RECT);
-  return { audio, bar, play };
+  const state = () => onSeekState.mock.calls.at(-1)![0] as TapeSeekState;
+  return { audio, state, play };
 }
 
-/** Клик на `second`-й секунде полосы в 30 с (ширина 300 px → 10 px на секунду). */
-const clickAt = (bar: HTMLElement, second: number) =>
-  fireEvent.pointerDown(bar, { clientX: second * 10 });
-
 describe("SeekableAudio: перемотка", () => {
-  it("на уровне: клик внутри открытой части перематывает", () => {
-    const { audio, bar } = setup(4);
-    clickAt(bar, 3);
+  it("на уровне: перемотка внутри открытой части", () => {
+    const { audio, state } = setup(4);
+    act(() => state().seek(3));
     expect(audio.currentTime).toBe(3);
   });
 
-  it("на уровне: клик дальше открытого фрагмента прижимается к его границе", () => {
-    const { audio, bar } = setup(4);
-    clickAt(bar, 25);
+  it("на уровне: дальше открытого фрагмента прижимается к его границе", () => {
+    const { audio, state } = setup(4);
+    act(() => state().seek(25));
     expect(audio.currentTime).toBe(4);
-    expect(bar).toHaveAttribute("aria-valuemax", "4");
+    expect(state().open).toBe(4);
   });
 
   it("файл клипа 50 с, уровень без границы — не дальше 30 с", () => {
-    const { audio, bar } = setup(null, 50);
-    clickAt(bar, 30);
+    const { audio, state } = setup(null, 50);
+    act(() => state().seek(40));
     expect(audio.currentTime).toBe(30);
-    expect(bar).toHaveAttribute("aria-valuemax", "30");
-  });
-
-  it("на ответе раунда весь фрагмент открыт: клик на 24-й секунде", () => {
-    const { audio, bar } = setup(null);
-    clickAt(bar, 24);
-    expect(audio.currentTime).toBe(24);
-  });
-
-  it("стрелка вправо на границе уровня не выходит за неё", async () => {
-    const user = userEvent.setup();
-    const { audio, bar } = setup(2);
-    bar.focus();
-    await user.keyboard("{ArrowRight}{ArrowRight}{ArrowRight}");
-    expect(audio.currentTime).toBe(2);
+    expect(state().open).toBe(30);
   });
 
   it("Play после перемотки продолжает с этого места, ссылка не меняется", async () => {
     const user = userEvent.setup();
-    const { audio, bar, play } = setup(null);
-    clickAt(bar, 12);
+    const { audio, state, play } = setup(null);
+    act(() => state().seek(12));
     await user.click(screen.getByRole("button"));
     expect(play).toHaveBeenCalledTimes(1);
     expect(audio.currentTime).toBe(12);
@@ -70,17 +54,23 @@ describe("SeekableAudio: перемотка", () => {
 
   it("с конца открытой части Play начинает сначала", async () => {
     const user = userEvent.setup();
-    const { audio, bar } = setup(4);
-    clickAt(bar, 4);
+    const { audio, state } = setup(4);
+    act(() => state().seek(4));
     expect(audio.currentTime).toBe(4);
     await user.click(screen.getByRole("button"));
     expect(audio.currentTime).toBe(0);
+  });
+
+  it("в самом плеере полосы перемотки нет", () => {
+    setup(4);
+    expect(screen.queryByRole("slider")).not.toBeInTheDocument();
   });
 });
 
 describe("SeekableAudio: проход до границы и прогресс", () => {
   function playerWithProgress(seconds: number | null) {
     const onProgress = vi.fn();
+    const onSeekState = vi.fn();
     const play = vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue(undefined);
     const pause = vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => {});
     vi.spyOn(HTMLMediaElement.prototype, "duration", "get").mockReturnValue(50);
@@ -89,12 +79,12 @@ describe("SeekableAudio: проход до границы и прогресс", 
         objectUrl="blob:test/1"
         seconds={seconds}
         onProgress={onProgress}
-        inlineSeek
+        onSeekState={onSeekState}
       />,
     );
     const audio = screen.getByTestId("clue-audio") as HTMLAudioElement;
     fireEvent.loadedMetadata(audio);
-    return { audio, onProgress, play, pause };
+    return { audio, onProgress, play, pause, onSeekState };
   }
 
   it("timeupdate за границей уровня: пауза, один проход без повтора, прогресс сбрасывается", async () => {
@@ -122,18 +112,20 @@ describe("SeekableAudio: проход до границы и прогресс", 
 
   it("перемотка во время игры сообщает долю от открытой части", async () => {
     const user = userEvent.setup();
-    const { onProgress } = playerWithProgress(10);
+    const { onProgress, onSeekState } = playerWithProgress(10);
     await user.click(screen.getByRole("button"));
-    const bar = screen.getByRole("slider");
-    vi.spyOn(bar, "getBoundingClientRect").mockReturnValue(RECT);
-    fireEvent.pointerDown(bar, { clientX: 50 }); // 5 с из 10 открытых
+    const { seek } = onSeekState.mock.calls.at(-1)![0] as TapeSeekState;
+    act(() => seek(5)); // 5 с из 10 открытых
     expect(onProgress).toHaveBeenLastCalledWith(0.5);
   });
 
   it("до загрузки метаданных (duration = NaN) граница — 30 с", () => {
     vi.spyOn(HTMLMediaElement.prototype, "duration", "get").mockReturnValue(Number.NaN);
-    renderWithProviders(<SeekableAudio objectUrl="blob:test/1" seconds={null} inlineSeek />);
-    expect(screen.getByRole("slider")).toHaveAttribute("aria-valuemax", "30");
+    const onSeekState = vi.fn();
+    renderWithProviders(
+      <SeekableAudio objectUrl="blob:test/1" seconds={null} onSeekState={onSeekState} />,
+    );
+    expect(onSeekState.mock.calls.at(-1)![0]).toMatchObject({ open: 30 });
   });
 
   it("второй клик по Play, пока play() не ответил, не ставит звук на паузу", async () => {
@@ -163,7 +155,6 @@ describe("SeekableAudio: перемотка по ленте подсказок",
     );
     fireEvent.loadedMetadata(screen.getByTestId("clue-audio"));
     expect(screen.queryByRole("slider")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("seek-bar")).not.toBeInTheDocument();
     const state = onSeekState.mock.calls.at(-1)?.[0];
     expect(state).toMatchObject({ time: 0, open: 4 });
     act(() => state.seek(25)); // дальше открытой части: к границе

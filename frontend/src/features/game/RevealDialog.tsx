@@ -20,7 +20,6 @@ import { roundOutcome } from "./levels";
 import { Metric } from "./Metric";
 import { RevealSave } from "./RevealSave";
 import { useFinalClue } from "./use-final-clue";
-import { RevealAudio } from "./RevealAudio";
 
 type Props = {
   sessionId: string;
@@ -98,10 +97,7 @@ export function RevealDialog({
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== " " && e.key !== "Enter") return;
       if (e.repeat || e.altKey || e.ctrlKey || e.metaKey) return;
-      if (
-        e.target instanceof HTMLElement &&
-        e.target.closest("button, a, input, [role=menu], [role=slider]")
-      )
+      if (e.target instanceof HTMLElement && e.target.closest("button, a, input, [role=menu]"))
         return;
       e.preventDefault();
       onNext();
@@ -193,7 +189,6 @@ function AnswerBody({ sessionId, round, stats, domain }: BodyProps) {
   return (
     <>
       <FinalArt sessionId={sessionId} round={round} domain={domain} title={reveal.title} />
-      <RevealAudio sessionId={sessionId} round={round} />
       <div className="flex flex-col items-center gap-1 text-center">
         <span className="text-[13px] text-ink-muted">{t("game.reveal.was")}</span>
         <h2
@@ -276,7 +271,7 @@ function AgreePct({ pct }: { pct: number }) {
  * Картинка ответа. Кадр финальной подсказки (`final_clue.kind === "image"`) — содержание ответа
  * (ревил `audio_blackout` и кадровые режимы, ADR 0026), поэтому обложка его не заменяет: кадр
  * качается и показывается всегда. Обложка или постер (`artwork`) — когда финальный ассет не
- * картинка (музыка: аудио) или кадр не скачался. Нет ничего — заглушка домена.
+ * картинка (музыка: аудио, его в ответе не проигрываем и не качаем) или кадр не скачался. Нет ничего — заглушка домена.
  */
 function FinalArt({
   sessionId,

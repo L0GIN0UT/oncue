@@ -36,7 +36,6 @@ describe("GameScreen — сессия по сборнику", () => {
     const tape = await screen.findByRole("slider", { name: "Перемотка" });
     expect(tape).toBeVisible();
     expect(tape).toHaveAccessibleDescription("Подсказки: открыт уровень 1 из 6");
-    expect(screen.queryByTestId("seek-bar")).not.toBeInTheDocument();
     expect(kinds).toEqual(expect.arrayContaining(["play", "collection"]));
   });
 });
