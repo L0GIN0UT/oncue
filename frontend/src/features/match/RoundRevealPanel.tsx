@@ -1,7 +1,8 @@
 "use client";
 /**
- * Ревил раунда матча: ответ раскрывается только в фазе `reveal` (античит), финальная подсказка —
- * тем же реестром `clueRegistry`, результаты игроков — уровень угадывания и очки раунда.
+ * Ревил раунда матча: ответ раскрывается только в фазе `reveal` (античит), финальный кадр —
+ * тем же реестром `clueRegistry` (аудио в ответе не проигрывается и не качается),
+ * результаты игроков — уровень угадывания и очки раунда.
  * Обложка или постер — `reveal.artwork`; нет его — заглушка.
  */
 import { useTranslations } from "next-intl";
@@ -23,7 +24,9 @@ type Props = {
 export function RoundRevealPanel({ code, reveal, players, domain }: Props) {
   const t = useTranslations();
   const dt = useDynamicT();
-  const finalClue = useLevelClue(code, reveal.final_clue);
+  // Аудио-фрагмент окну ответа не нужен: качаем только кадр (кино).
+  const frame = reveal.final_clue?.kind === "audio" ? null : reveal.final_clue;
+  const finalClue = useLevelClue(code, frame);
   const Clue = finalClue.data ? clueRegistry[finalClue.data.kind] : null;
   const names = new Map(players.map((p) => [p.user_id, p.nickname]));
   const results = [...reveal.results].sort((a, b) => b.score - a.score);

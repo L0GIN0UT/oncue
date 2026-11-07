@@ -48,4 +48,20 @@ describe("ревил комнаты: обложка и постер", () => {
     expect(screen.queryByRole("img")).not.toBeInTheDocument();
     expect(screen.getByTestId("reveal-title")).toHaveTextContent("Nevermind");
   });
+
+  it("аудио-фрагмент в ответе не проигрывается", () => {
+    renderWithProviders(
+      <RoundRevealPanel
+        code="K7MQ2XWP"
+        reveal={reveal({
+          artwork,
+          final_clue: { kind: "audio", url: "https://m/a.mp3", expires_at: "2099-01-01T00:00:00Z" },
+        } as Partial<RoundRevealDelta>)}
+        players={[]}
+        domain="music"
+      />,
+    );
+    expect(screen.queryByTestId("clue-audio")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Слушать|Пауза/ })).not.toBeInTheDocument();
+  });
 });

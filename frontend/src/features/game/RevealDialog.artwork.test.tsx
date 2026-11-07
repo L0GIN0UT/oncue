@@ -70,4 +70,25 @@ describe("ответ раунда: обложка и постер", () => {
     expect(screen.queryByRole("img")).not.toBeInTheDocument();
     expect(screen.getByTestId("reveal-title")).toHaveTextContent("Nevermind");
   });
+
+  it("музыка: Play и перемотки нет, обложка, название, исполнитель, сохранение и «Продолжить» на месте", async () => {
+    show(round({ artwork }));
+    expect(screen.queryByTestId("clue-audio")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("reveal-audio")).not.toBeInTheDocument();
+    expect(screen.queryByRole("slider")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Слушать|Пауза|Воспроизвести/ })).toBeNull();
+    expect(screen.getByRole("img", { name: "Обложка «Nevermind»" })).toBeInTheDocument();
+    expect(screen.getByTestId("reveal-title")).toHaveTextContent("Nevermind");
+    expect(screen.getByText("Nirvana · 1991")).toBeInTheDocument();
+    expect(await screen.findByText("В плейлист")).toBeInTheDocument();
+    expect(screen.getByTestId("reveal-next")).toHaveTextContent("Продолжить");
+  });
+
+  it("аудио-ассет ответа не запрашивается", async () => {
+    const fetched = vi.spyOn(globalThis, "fetch");
+    show(round({ artwork }));
+    await new Promise((r) => setTimeout(r, 50));
+    expect(fetched.mock.calls.filter(([u]) => String(u).includes("a.mp3"))).toEqual([]);
+    fetched.mockRestore();
+  });
 });
