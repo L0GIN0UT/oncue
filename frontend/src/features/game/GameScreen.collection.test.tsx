@@ -32,9 +32,11 @@ describe("GameScreen — сессия по сборнику", () => {
     expect(await screen.findByTestId("game-mode")).toHaveTextContent(/Сборник по вступлению/);
     // Шкала времени из levels[].hint.seconds шаблона: 0,5 с → 1 с.
     expect(await screen.findByTestId("skip")).toHaveTextContent("Пропустить (+0,5 с)");
-    expect(
-      screen.getByRole("progressbar", { name: "Подсказки: открыт уровень 1 из 6" }),
-    ).toBeVisible();
+    // Аудио открыто — лента подсказок же и перемотка; про уровень говорит описание.
+    const tape = await screen.findByRole("slider", { name: "Перемотка" });
+    expect(tape).toBeVisible();
+    expect(tape).toHaveAccessibleDescription("Подсказки: открыт уровень 1 из 6");
+    expect(screen.queryByTestId("seek-bar")).not.toBeInTheDocument();
     expect(kinds).toEqual(expect.arrayContaining(["play", "collection"]));
   });
 });

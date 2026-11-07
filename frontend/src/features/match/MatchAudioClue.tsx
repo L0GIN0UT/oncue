@@ -15,7 +15,7 @@ import type { ClueStageProps } from "@/features/game/clues/types";
 
 export { MAX_CLIP_S, playbackLimit } from "@/features/game/clues/audio-limit";
 
-export function MatchAudioClue({ clue, onProgress, scene = "stage" }: ClueStageProps) {
+export function MatchAudioClue({ clue, onProgress, onSeekState, scene = "stage" }: ClueStageProps) {
   const t = useTranslations();
   return (
     <div
@@ -33,6 +33,7 @@ export function MatchAudioClue({ clue, onProgress, scene = "stage" }: ClueStageP
         seconds={clue.meta.seconds ?? null}
         replayLabel={t("match.replay")}
         onProgress={onProgress}
+        onSeekState={onSeekState}
       />
       {scene === "blackout" && <p className="text-sm text-white/70">{t("game.blackoutHint")}</p>}
     </div>

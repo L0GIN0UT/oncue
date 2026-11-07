@@ -10,7 +10,7 @@ import { cn } from "@/shared/lib/cn";
 import { SeekableAudio } from "./SeekableAudio";
 import type { ClueStageProps } from "./types";
 
-export function AudioClue({ clue, onProgress, scene = "stage" }: ClueStageProps) {
+export function AudioClue({ clue, onProgress, onSeekState, scene = "stage" }: ClueStageProps) {
   const t = useTranslations();
   return (
     <div
@@ -27,6 +27,7 @@ export function AudioClue({ clue, onProgress, scene = "stage" }: ClueStageProps)
         objectUrl={clue.objectUrl}
         seconds={clue.meta.seconds ?? null}
         onProgress={onProgress}
+        onSeekState={onSeekState}
       />
       {scene === "blackout" && <p className="text-sm text-white/70">{t("game.blackoutHint")}</p>}
     </div>

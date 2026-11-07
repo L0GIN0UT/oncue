@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, screen } from "@testing-library/react";
+import { act, fireEvent, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "@/test/render";
 import { SeekableAudio } from "./SeekableAudio";
@@ -11,7 +11,7 @@ afterEach(() => vi.restoreAllMocks());
 function setup(seconds: number | null, fileDuration = 50) {
   const play = vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue(undefined);
   vi.spyOn(HTMLMediaElement.prototype, "duration", "get").mockReturnValue(fileDuration);
-  renderWithProviders(<SeekableAudio objectUrl="blob:test/1" seconds={seconds} />);
+  renderWithProviders(<SeekableAudio objectUrl="blob:test/1" seconds={seconds} inlineSeek />);
   const audio = screen.getByTestId("clue-audio") as HTMLAudioElement;
   fireEvent.loadedMetadata(audio);
   const bar = screen.getByRole("slider");
@@ -85,7 +85,12 @@ describe("SeekableAudio: проход до границы и прогресс", 
     const pause = vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => {});
     vi.spyOn(HTMLMediaElement.prototype, "duration", "get").mockReturnValue(50);
     renderWithProviders(
-      <SeekableAudio objectUrl="blob:test/1" seconds={seconds} onProgress={onProgress} />,
+      <SeekableAudio
+        objectUrl="blob:test/1"
+        seconds={seconds}
+        onProgress={onProgress}
+        inlineSeek
+      />,
     );
     const audio = screen.getByTestId("clue-audio") as HTMLAudioElement;
     fireEvent.loadedMetadata(audio);
@@ -127,7 +132,7 @@ describe("SeekableAudio: проход до границы и прогресс", 
 
   it("до загрузки метаданных (duration = NaN) граница — 30 с", () => {
     vi.spyOn(HTMLMediaElement.prototype, "duration", "get").mockReturnValue(Number.NaN);
-    renderWithProviders(<SeekableAudio objectUrl="blob:test/1" seconds={null} />);
+    renderWithProviders(<SeekableAudio objectUrl="blob:test/1" seconds={null} inlineSeek />);
     expect(screen.getByRole("slider")).toHaveAttribute("aria-valuemax", "30");
   });
 
@@ -146,5 +151,31 @@ describe("SeekableAudio: проход до границы и прогресс", 
     expect(pause).not.toHaveBeenCalled();
     resolve();
     expect(await screen.findByRole("button", { name: "Пауза" })).toBeInTheDocument();
+  });
+});
+
+describe("SeekableAudio: перемотка по ленте подсказок", () => {
+  it("на уровне мини-перемотки нет, а состояние для ленты отдаётся", () => {
+    const onSeekState = vi.fn();
+    vi.spyOn(HTMLMediaElement.prototype, "duration", "get").mockReturnValue(50);
+    renderWithProviders(
+      <SeekableAudio objectUrl="blob:test/1" seconds={4} onSeekState={onSeekState} />,
+    );
+    fireEvent.loadedMetadata(screen.getByTestId("clue-audio"));
+    expect(screen.queryByRole("slider")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("seek-bar")).not.toBeInTheDocument();
+    const state = onSeekState.mock.calls.at(-1)?.[0];
+    expect(state).toMatchObject({ time: 0, open: 4 });
+    act(() => state.seek(25)); // дальше открытой части: к границе
+    expect((screen.getByTestId("clue-audio") as HTMLAudioElement).currentTime).toBe(4);
+  });
+
+  it("размонтирование сообщает null", () => {
+    const onSeekState = vi.fn();
+    const { unmount } = renderWithProviders(
+      <SeekableAudio objectUrl="blob:test/1" seconds={4} onSeekState={onSeekState} />,
+    );
+    unmount();
+    expect(onSeekState).toHaveBeenLastCalledWith(null);
   });
 });

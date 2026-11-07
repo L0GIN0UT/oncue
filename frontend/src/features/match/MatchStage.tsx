@@ -17,6 +17,7 @@ import { Modal } from "@/shared/ui/modal";
 import { AttemptRows } from "@/features/game/AttemptRows";
 import { TapeDeck } from "@/features/game/TapeDeck";
 import { clueRegistry, clueSceneOf } from "@/features/game/clues/registry";
+import type { TapeSeekState } from "@/features/game/clues/types";
 import { tapeWeights } from "@/features/game/levels";
 import { useSessionMode } from "@/features/game/modes";
 import { MuteButton } from "@/features/game/MuteButton";
@@ -67,6 +68,7 @@ export function MatchStage({ code, state, store, clock, myId, bubbles, act, comm
   const clue = useLevelClue(code, room.phase === "level_open" ? match?.clue : null);
   const Clue = clue.data ? clueRegistry[clue.data.kind] : null;
   const confirmedTag = useRef<string | null>(null);
+  const [tapeSeek, setTapeSeek] = useState<TapeSeekState | null>(null);
   const [clipRetry, setClipRetry] = useState(0);
   const format = room.settings.answer_format;
   const Answer = isKnownAnswerFormat(format) ? matchAnswerRegistry[format] : null;
@@ -251,6 +253,7 @@ export function MatchStage({ code, state, store, clock, myId, bubbles, act, comm
               levels={levels}
               level={level}
               progress={room.phase === "level_open" ? tapeProgress : null}
+              seek={room.phase === "level_open" ? tapeSeek : null}
             />
           )}
 
@@ -282,12 +285,14 @@ export function MatchStage({ code, state, store, clock, myId, bubbles, act, comm
                 clue={clue.data}
                 scene={clueSceneOf(room.settings.clue_type)}
                 onProgress={(value) => setProgress({ tag: roundTag, value })}
+                onSeekState={setTapeSeek}
               />
             ) : Clue && clue.data ? (
               <Clue
                 clue={clue.data}
                 scene={clueSceneOf(room.settings.clue_type)}
                 onProgress={(value) => setProgress({ tag: roundTag, value })}
+                onSeekState={setTapeSeek}
               />
             ) : (
               <div className="grid min-h-[88px] place-items-center text-ink-muted" role="status">

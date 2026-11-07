@@ -7,9 +7,21 @@ import type { LoadedClue } from "../use-clue";
  */
 export type ClueScene = "stage" | "blackout";
 
+/** Состояние плеера для перемотки по ленте подсказок. */
+export type TapeSeekState = {
+  /** Позиция в фрагменте, с. */
+  time: number;
+  /** Открытая часть фрагмента, с: дальше перематывать нельзя. */
+  open: number;
+  /** Перемотать на секунду; плеер сам прижмёт её к открытой части. */
+  seek: (seconds: number) => void;
+};
+
 export type ClueStageProps = {
   clue: LoadedClue;
   scene?: ClueScene;
   /** Сообщить долю воспроизведения 0..1 от длительности уровня (только для загадок со временем). */
   onProgress?: (fraction: number | null) => void;
+  /** Сообщить состояние для перемотки по ленте; `null` — плеер размонтирован. */
+  onSeekState?: (state: TapeSeekState | null) => void;
 };

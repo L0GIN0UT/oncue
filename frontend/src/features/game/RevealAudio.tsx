@@ -15,7 +15,13 @@ export function RevealAudio({ sessionId, round }: { sessionId: string; round: Ro
   if (!clip || !objectUrl) return null;
   return (
     <div className="flex flex-col items-center gap-3" data-testid="reveal-audio">
-      <SeekableAudio key={objectUrl} objectUrl={objectUrl} seconds={null} playClassName="size-14" />
+      <SeekableAudio
+        key={objectUrl}
+        objectUrl={objectUrl}
+        seconds={null}
+        playClassName="size-14"
+        inlineSeek
+      />
     </div>
   );
 }
