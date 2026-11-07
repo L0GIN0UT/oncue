@@ -1,19 +1,21 @@
 "use client";
 /**
- * Плеер фрагмента: кнопка Play и полоса перемотки (`SeekBar`). Играет один проход до границы
+ * Плеер фрагмента: кнопка Play; мини-перемотка (`SeekBar`) — только в ответе раунда (`inlineSeek`),
+ * на уровне перематывают по ленте подсказок (`onSeekState` отдаёт ей позицию и `seek`). Играет один проход до границы
  * (`playbackLimit`: длина подачи уровня, но не больше 30 с — в файле клипа дальше паддинг),
  * автоповтора нет. Перемотка — внутри открытой части: на уровне это `seconds`, на ответе
  * раунда (`seconds` = null) — весь фрагмент. Граница держится и через `timeupdate`: в фоновой
  * вкладке `requestAnimationFrame` замирает, а звук идёт дальше. Воспроизведение — только по
  * жесту; повтор и перемотка не запрашивают новую ссылку (файл уже в `Blob`).
  */
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useFormatter, useTranslations } from "next-intl";
 import { PlayButton } from "@/shared/ui/play-button";
 import { SeekBar } from "@/shared/ui/seek-bar";
 import { cn } from "@/shared/lib/cn";
 import { useMuted } from "../use-muted";
 import { MAX_CLIP_S, playbackLimit } from "./audio-limit";
+import type { TapeSeekState } from "./types";
 
 type Props = {
   objectUrl: string;
@@ -24,6 +26,10 @@ type Props = {
   /** Доля воспроизведения 0..1 от открытой части; `null` — стоит. */
   onProgress?: (fraction: number | null) => void;
   playClassName?: string;
+  /** Мини-перемотка рядом с Play (ответ раунда, весь фрагмент открыт). */
+  inlineSeek?: boolean;
+  /** Состояние для перемотки по ленте подсказок; `null` — размонтирование. */
+  onSeekState?: (state: TapeSeekState | null) => void;
 };
 
 export function SeekableAudio({
@@ -32,6 +38,8 @@ export function SeekableAudio({
   replayLabel,
   onProgress,
   playClassName,
+  inlineSeek = false,
+  onSeekState,
 }: Props) {
   const t = useTranslations();
   const format = useFormatter();
@@ -97,6 +105,20 @@ export function SeekableAudio({
     if (playing) onProgress?.(target / bound);
   };
 
+  // Лента получает стабильный `seek` и свежие время/границу; колбэки держим в ref, чтобы эффект
+  // зависел только от данных.
+  const seekRef = useRef(seek);
+  const stateRef = useRef(onSeekState);
+  useEffect(() => {
+    seekRef.current = seek;
+    stateRef.current = onSeekState;
+  });
+  const stableSeek = useCallback((to: number) => seekRef.current(to), []);
+  useEffect(() => {
+    stateRef.current?.({ time, open: limit, seek: stableSeek });
+  }, [time, limit, stableSeek]);
+  useEffect(() => () => stateRef.current?.(null), []);
+
   const toggle = async () => {
     const el = audio.current;
     if (!el || starting.current) return;
@@ -154,7 +176,7 @@ export function SeekableAudio({
         aria-label={playing ? t("game.pause") : label}
         className={cn(playClassName)}
       />
-      <SeekBar value={time} max={MAX_CLIP_S} open={limit} onSeek={seek} />
+      {inlineSeek && <SeekBar value={time} max={MAX_CLIP_S} open={limit} onSeek={seek} />}
     </>
   );
 }

@@ -28,6 +28,7 @@ import { SessionProgress } from "./SessionProgress";
 import { needsLevelClue } from "./answers/pick";
 import { answerRegistry } from "./answers/registry";
 import { clueRegistry, clueSceneOf } from "./clues/registry";
+import type { TapeSeekState } from "./clues/types";
 import { TapeDeck } from "./TapeDeck";
 import { tapeWeights } from "./levels";
 import { useSessionMode } from "./modes";
@@ -91,6 +92,7 @@ export function GameScreen({ sessionId }: { sessionId: string }) {
     [levelTag],
   );
   // Кадровая загадка показывает сам кадр вместо ленты; вид помним и на ответе раунда.
+  const [tapeSeek, setTapeSeek] = useState<TapeSeekState | null>(null);
   const [imageClue, setImageClue] = useState(false);
   const knownKind = clue.data?.kind;
   if (knownKind && imageClue !== (knownKind === "image")) setImageClue(knownKind === "image");
@@ -208,7 +210,13 @@ export function GameScreen({ sessionId }: { sessionId: string }) {
       </div>
 
       {multiLevel && (withClue || revealing) && !imageClue && (
-        <TapeDeck weights={weights} levels={levels} level={round.level} progress={tapeProgress} />
+        <TapeDeck
+          weights={weights}
+          levels={levels}
+          level={round.level}
+          progress={tapeProgress}
+          seek={tapeSeek}
+        />
       )}
 
       {revealing ? (
@@ -235,6 +243,7 @@ export function GameScreen({ sessionId }: { sessionId: string }) {
                   clue={clue.data}
                   scene={clueSceneOf(snapshot.mode.clue_type)}
                   onProgress={setProgress}
+                  onSeekState={setTapeSeek}
                 />
               ) : (
                 <div className="grid min-h-[88px] place-items-center text-ink-muted" role="status">

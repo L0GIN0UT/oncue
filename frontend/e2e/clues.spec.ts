@@ -118,3 +118,18 @@ for (const [mode, node] of [
     await expect(clue).toBeAttached();
   });
 }
+
+test("music.random.classic: мини-перемотки нет, перематывают по ленте подсказок", async ({
+  page,
+}) => {
+  await page.goto("/play/music.random.classic");
+  await expect(page.getByTestId("clue-audio")).toBeAttached();
+  await expect(page.getByTestId("seek-bar")).toHaveCount(0);
+  const tape = page.getByRole("slider", { name: "Перемотка" });
+  await expect(tape).toBeVisible();
+  // Клик далеко правее открытой границы прижимается к ней: на уровне 1 это 0,5 с.
+  const box = (await tape.boundingBox())!;
+  await page.mouse.click(box.x + box.width - 2, box.y + box.height / 2);
+  await expect(tape).toHaveAttribute("aria-valuenow", "0.5");
+  await expect(tape).toHaveAttribute("aria-valuemax", "0.5");
+});
