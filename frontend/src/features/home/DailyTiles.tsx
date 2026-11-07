@@ -68,10 +68,15 @@ export function DailyTile({ domain, card }: { domain: Domain; card: DailyCard | 
       data-testid={`home-daily-${domain}`}
       className="min-h-[196px]"
     >
-      {/* Фоновая иконка справа у обеих плиток: единый вид музыки и кино. */}
+      {/* Фоновая иконка справа у обеих плиток. У музыки она в середине справа (подпись короче),
+          у кино ниже, в пустом углу рядом с чипом статуса: подпись кино длиннее и иначе
+          заходила бы на иконку. */}
       <Icon
         aria-hidden
-        className="pointer-events-none absolute top-10 -right-3 size-24 text-stage-raised"
+        className={cn(
+          "pointer-events-none absolute -right-3 text-stage-raised",
+          music ? "top-10 size-24" : "-bottom-3 size-20",
+        )}
         strokeWidth={1.5}
       />
       <div className="relative mt-auto flex items-center justify-between gap-3">
